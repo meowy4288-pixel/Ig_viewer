@@ -498,6 +498,11 @@ def write_export(out_root, msgs, files_by_thread, tz):
                 name = uri.split("/")[-1]
                 if name in written:
                     continue
+                # Fixtures named deleted_* are deliberately NEVER written, so the
+                # "referenced but absent from the export" case is real rather than
+                # asserted-but-actually-present.
+                if name.startswith("deleted_"):
+                    continue
                 written.add(name)
                 path.parent.mkdir(parents=True, exist_ok=True)
                 ext = name.rsplit(".", 1)[-1]

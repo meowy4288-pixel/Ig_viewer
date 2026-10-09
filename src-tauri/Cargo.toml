@@ -16,6 +16,21 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# bundled: compiles SQLite from vendored source, so no system libsqlite3 and no
+# network at build time. load_extension is deliberately NOT enabled anywhere.
+rusqlite = { version = "=0.40.2", features = ["bundled"] }
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+log = "0.4"
+# Only for O_NOFOLLOW when opening validated media; no other libc use.
+libc = "0.2"
+# System IANA timezone detection (reads /etc/localtime, no network).
+iana-time-zone = "0.1"
+# IANA rules bundled at compile time: no network, no runtime tzdata dependency.
+chrono-tz = "0.10"
+rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "tokio"] }
+
+[dev-dependencies]
+tempfile = "3"
 
 [profile.release]
 codegen-units = 1
