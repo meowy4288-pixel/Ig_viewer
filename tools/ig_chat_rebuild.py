@@ -44,6 +44,43 @@ def fix(s):
         return s
 
 
+# Media fields, in the fixed order that forms the dedupe key's URI vector. All six
+# kinds are included: an `or` chain (photos or videos or ...) would silently ignore
+# every kind after the first one present, which is wrong for a message carrying
+# e.g. both a photo and a voice note.
+MEDIA_KINDS = ("photos", "videos", "audio_files", "gifs", "sticker", "files")
+
+
+def media_uris(m):
+    """Ordered URI vector for the dedupe key: all six kinds, each kind's entries in
+    on-disk order. `sticker` is a single {"uri": ...} object in real exports, not an
+    array, so it is unwrapped here."""
+    uris = []
+    for kind in MEDIA_KINDS:
+        v = m.get(kind)
+        if not v:
+            continue
+        if kind == "sticker":
+            if isinstance(v, dict) and v.get("uri"):
+                uris.append(v["uri"])
+            elif isinstance(v, str):
+                uris.append(v)
+            continue
+        for item in v:
+            if isinstance(item, dict) and item.get("uri"):
+                uris.append(item["uri"])
+            elif isinstance(item, str):
+                uris.append(item)
+    return uris
+
+
+def dedupe_key(m):
+    """(timestamp_ms, sender_name_raw, content_raw, ordered_media_uris).
+    Reactions and share are deliberately excluded."""
+    return (m.get("timestamp_ms"), m.get("sender_name"), m.get("content"),
+            tuple(media_uris(m)))
+
+
 def load_messages(thread_dir):
     files = sorted(thread_dir.glob("message_*.json"))
     if not files:
@@ -64,8 +101,7 @@ def load_messages(thread_dir):
             earlier |= k
         here = set()
         for m in data.get("messages", []):
-            key = (m.get("timestamp_ms"), m.get("sender_name"), m.get("content"),
-                   json.dumps(m.get("photos") or m.get("videos") or m.get("audio_files") or "", sort_keys=True))
+            key = dedupe_key(m)
             if key in earlier:
                 continue
             here.add(key)
@@ -96,9 +132,7 @@ def dump_order(thread_dir, out_path):
         here = set()
         for idx, m in enumerate(data.get("messages", [])):
             # Same key as load_messages: reactions/share are deliberately excluded.
-            key = (m.get("timestamp_ms"), m.get("sender_name"), m.get("content"),
-                   json.dumps(m.get("photos") or m.get("videos") or m.get("audio_files") or "",
-                              sort_keys=True))
+            key = dedupe_key(m)
             if key in earlier:
                 continue
             here.add(key)
