@@ -1,0 +1,23 @@
+{
+  "name": "ig-viewer",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Offline desktop viewer for Instagram DM exports (JSON). No network, ever.",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:watch": "node scripts/watch.mjs",
+    "typecheck": "tsc --noEmit",
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "start": "tauri dev"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.12.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.1",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.9.3"
+  }
+}

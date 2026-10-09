@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Main window. Fully offline: no filesystem, shell, http, updater or opener access. The app's own Rust commands are not gated by capabilities.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

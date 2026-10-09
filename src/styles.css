@@ -1,0 +1,42 @@
+:root {
+  --bg: #0e0e10;
+  --panel: #17171a;
+  --line: #2a2a30;
+  --text: #eee;
+  --dim: #8a8a93;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px system-ui, sans-serif;
+}
+
+#app {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#hint {
+  text-align: center;
+  padding: 2rem;
+  line-height: 1.6;
+}
+
+#hint h1 {
+  font-size: 1.2rem;
+  margin: 0 0 0.5rem;
+}
+
+.dim {
+  color: var(--dim);
+}
