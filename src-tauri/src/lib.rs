@@ -203,6 +203,123 @@ fn set_timezone(app: tauri::AppHandle, archive_id: String, timezone: String) -> 
     Ok(())
 }
 
+fn open_conn<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    archive_id: &str,
+) -> Result<rusqlite::Connection, String> {
+    db::validate_id(archive_id).map_err(|_| "malformed-archive-id".to_string())?;
+    let dir = archives_dir(app)?;
+    let path = db::db_path(&dir, archive_id);
+    rusqlite::Connection::open(path).map_err(|_| "open-db".to_string())
+}
+
+/// Sidebar: every thread with its message count and last-activity time.
+#[tauri::command]
+fn list_threads(app: tauri::AppHandle, archive_id: String) -> Result<String, String> {
+    let conn = open_conn(&app, &archive_id)?;
+    let threads = db::list_threads(&conn)?;
+    let tz = db::timezone(&conn).unwrap_or_else(|| "UTC".to_string());
+    let rows: Vec<_> = threads
+        .iter()
+        .map(|t| {
+            serde_json::json!({
+                "key": t.key,
+                "title": if t.title.is_empty() { &t.key } else { &t.title },
+                "message_count": t.message_count,
+                "last_ts_ms": t.last_ts_ms,
+            })
+        })
+        .collect();
+    Ok(serde_json::json!({ "threads": rows, "timezone": tz }).to_string())
+}
+
+/// A thread's participants and month buckets.
+#[tauri::command]
+fn get_thread(
+    app: tauri::AppHandle,
+    archive_id: String,
+    thread_key: String,
+) -> Result<String, String> {
+    let conn = open_conn(&app, &archive_id)?;
+    let participants = db::thread_participants(&conn, &thread_key);
+    let months = db::thread_months(&conn, &thread_key)?;
+    let months: Vec<_> = months
+        .iter()
+        .map(|m| serde_json::json!({"key": m.key, "count": m.count}))
+        .collect();
+    Ok(serde_json::json!({ "participants": participants, "months": months }).to_string())
+}
+
+/// One month of messages, in display order.
+#[tauri::command]
+fn get_month(
+    app: tauri::AppHandle,
+    archive_id: String,
+    thread_key: String,
+    month: String,
+) -> Result<String, String> {
+    let conn = open_conn(&app, &archive_id)?;
+    let msgs = db::month_messages(&conn, &thread_key, &month)?;
+    let rows: Vec<_> = msgs
+        .iter()
+        .map(|m| {
+            let media: Vec<_> = m
+                .media
+                .iter()
+                .map(|md| {
+                    let mut o = serde_json::json!({
+                        "media_id": md.media_id,
+                        "kind": md.kind,
+                        "available": md.available,
+                    });
+                    if md.available {
+                        o["url"] = serde_json::Value::String(protocol::media_url(
+                            &archive_id,
+                            md.media_id,
+                        ));
+                    }
+                    o
+                })
+                .collect();
+            serde_json::json!({
+                "id": m.id,
+                "seq": m.seq,
+                "ts_ms": m.ts_ms,
+                "month": m.month,
+                "sender": m.sender,
+                "content": m.content,
+                "is_unsent": m.is_unsent,
+                "call_duration": m.call_duration,
+                "media": media,
+                "reactions": m.reactions.iter().map(|(a, r)| serde_json::json!({"actor": a, "reaction": r})).collect::<Vec<_>>(),
+            })
+        })
+        .collect();
+    Ok(serde_json::json!({ "messages": rows }).to_string())
+}
+
+/// Month key covering `ts_ms`, for jump-to-date.
+#[tauri::command]
+fn month_for_ts(app: tauri::AppHandle, archive_id: String, ts_ms: i64) -> Result<String, String> {
+    let conn = open_conn(&app, &archive_id)?;
+    let month = db::month_of_ts(&conn, ts_ms).unwrap_or_else(|| "1970-01".to_string());
+    Ok(serde_json::json!({ "month": month }).to_string())
+}
+
+/// The archive's stored timezone and whether it was a detected fallback.
+#[tauri::command]
+fn get_timezone(app: tauri::AppHandle, archive_id: String) -> Result<String, String> {
+    let (detected, fell_back) = system_tz();
+    let conn = open_conn(&app, &archive_id)?;
+    let stored = db::timezone(&conn).unwrap_or_else(|| detected.clone());
+    Ok(serde_json::json!({
+        "timezone": stored,
+        "system": detected,
+        "fallback": fell_back || stored == "UTC" && detected != "UTC",
+    })
+    .to_string())
+}
+
 /// Full-text search over message content.
 #[tauri::command]
 fn search_messages(
@@ -388,8 +505,10 @@ fn navigation_allowed(url: &tauri::Url) -> bool {
     match url.scheme() {
         "tauri" => true,
         "http" | "https" => url.host_str() == Some("tauri.localhost") || allow_dev_server(url),
-        // Registered in a later milestone; inert until then.
-        "igmedia" => true,
+        // igmedia is a SUBRESOURCE scheme only: it may be an <img>/<video>/<audio>
+        // src, never a document target. Refusing it here means a stray link or a
+        // window.open cannot turn a media URL into a navigation or an IPC origin.
+        "igmedia" => false,
         _ => false,
     }
 }
@@ -416,6 +535,11 @@ pub fn run() {
             app_info,
             pick_export_folder,
             index_archive,
+            list_threads,
+            get_thread,
+            get_month,
+            month_for_ts,
+            get_timezone,
             set_timezone,
             search_messages,
             delete_index,

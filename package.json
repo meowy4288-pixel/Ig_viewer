@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
     "dev": "tauri dev",
-    "start": "tauri dev"
+    "start": "tauri dev",
+    "test:ts": "node scripts/build-tests.mjs && node --test dist-test/logic.test.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.1"

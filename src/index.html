@@ -7,12 +7,46 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <main id="app">
-      <section id="hint">
-        <h1 id="title"></h1>
-        <p id="boot" class="dim">Starting&hellip;</p>
-      </section>
+    <aside id="side">
+      <header>
+        <b id="title">IG Chat Archive Viewer</b>
+        <div class="row">
+          <button id="pick" type="button">Choose export folder&hellip;</button>
+          <button id="delete" type="button" hidden>Delete index</button>
+        </div>
+        <input id="root" type="text" placeholder="…or paste the export folder path" />
+        <button id="index" type="button">Index this folder</button>
+        <input id="filter" type="search" placeholder="Filter chats…" disabled />
+        <small id="status">Starting&hellip;</small>
+        <small id="tz"></small>
+      </header>
+      <div id="fallback" class="warn" hidden></div>
+      <div id="list"></div>
+    </aside>
+
+    <main id="main">
+      <div id="toolbar" hidden>
+        <select id="me" title="Which participant are you?"></select>
+        <button id="first" type="button">Start</button>
+        <button id="prev" type="button">&#9664;</button>
+        <select id="months"></select>
+        <button id="next" type="button">&#9654;</button>
+        <button id="last" type="button">Latest</button>
+        <input id="date" type="date" title="Jump to date" />
+        <input id="q" type="search" placeholder="Search all chats…" />
+        <span class="sp"></span>
+        <input id="tzinput" type="text" placeholder="Timezone, e.g. Europe/Warsaw" size="18" />
+        <button id="tzset" type="button">Apply</button>
+      </div>
+      <div id="results" hidden></div>
+      <div id="msgs">
+        <div class="dim">
+          Choose your unzipped Instagram export folder to begin. Everything stays on this
+          computer: the app makes no network requests.
+        </div>
+      </div>
     </main>
+
     <script type="module" src="./main.js"></script>
   </body>
 </html>

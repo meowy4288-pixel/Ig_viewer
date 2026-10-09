@@ -36,4 +36,17 @@ Hard rules:
   X-Content-Type-Options: nosniff and Cache-Control: no-store.
 - The export root for a media request comes from the archive's own meta table, never
   from the request, so a forged id cannot steer resolution.
-- Verify framework APIs against current Tauri 2 docs before using them.
+- igmedia is a SUBRESOURCE scheme only. on_navigation returns false for it, so the
+  webview can never navigate to igmedia: or any custom scheme; it is only ever an
+  <img>/<video>/<audio> src. Only http(s) anchors exist in the UI.
+- Media range requests are single-range only (bytes=a-b, bytes=a-, bytes=-n).
+  Multi-range returns 400 rather than a partial multipart response.
+- Frontend rules: no innerHTML/outerHTML/insertAdjacentHTML/document.write anywhere;
+  chat text is only ever set with textContent or createTextNode. splitLinks() in
+  src/logic.ts decides link boundaries and only ever yields http(s); ui.ts
+  re-validates before building an anchor.
+- Pure display logic lives in src/logic.ts with no DOM or Tauri imports so it can be
+  unit tested under node (`npm run test:ts`). The ordering contract
+  (ts_ms ASC, seq DESC) is re-asserted there so a UI regression fails a test.
+- An index that skipped any files must say so in the UI; never claim a complete
+  import.

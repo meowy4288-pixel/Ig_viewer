@@ -296,6 +296,213 @@ pub fn delete_index(dir: &Path, id: &str) -> Result<(), IdError> {
     }
 }
 
+/// Thread list for the sidebar: key, title, message count, last timestamp.
+pub fn list_threads(conn: &Connection) -> Result<Vec<ThreadSummary>, String> {
+    let mut st = conn
+        .prepare(
+            "SELECT t.key, COALESCE(t.title,''), t.kept_count,
+                    COALESCE(MAX(m.ts_ms), 0)
+             FROM threads t LEFT JOIN messages m ON m.thread_id = t.id
+             GROUP BY t.id ORDER BY MAX(m.ts_ms) DESC",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = st
+        .query_map([], |r| {
+            Ok(ThreadSummary {
+                key: r.get(0)?,
+                title: r.get(1)?,
+                message_count: r.get::<_, i64>(2)?,
+                last_ts_ms: r.get::<_, i64>(3)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone)]
+pub struct ThreadSummary {
+    pub key: String,
+    pub title: String,
+    pub message_count: i64,
+    pub last_ts_ms: i64,
+}
+
+/// One thread's participants (already repaired).
+pub fn thread_participants(conn: &Connection, key: &str) -> Vec<String> {
+    // Participants are not stored separately; recover distinct senders in order.
+    let Ok(mut st) = conn.prepare(
+        "SELECT DISTINCT m.sender FROM messages m JOIN threads t ON t.id = m.thread_id
+         WHERE t.key = ?1 ORDER BY m.sender",
+    ) else {
+        return Vec::new();
+    };
+    st.query_map([key], |r| r.get::<_, String>(0))
+        .map(|it| it.flatten().collect())
+        .unwrap_or_default()
+}
+
+/// Month keys for a thread with their message ranges.
+pub fn thread_months(conn: &Connection, key: &str) -> Result<Vec<MonthBucket>, String> {
+    let mut st = conn
+        .prepare(
+            "SELECT m.month, COUNT(*), MIN(m.ts_ms), MAX(m.ts_ms)
+             FROM messages m JOIN threads t ON t.id = m.thread_id
+             WHERE t.key = ?1 GROUP BY m.month ORDER BY m.month",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = st
+        .query_map([key], |r| {
+            Ok(MonthBucket {
+                key: r.get(0)?,
+                count: r.get::<_, i64>(1)?,
+                first_ts_ms: r.get(2)?,
+                last_ts_ms: r.get(3)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone)]
+pub struct MonthBucket {
+    pub key: String,
+    pub count: i64,
+    pub first_ts_ms: i64,
+    pub last_ts_ms: i64,
+}
+
+/// A message as the UI needs it: repaired text plus OPAQUE media ids.
+#[derive(Debug, Clone)]
+pub struct UiMessage {
+    pub id: i64,
+    pub seq: i64,
+    pub ts_ms: i64,
+    pub month: String,
+    pub sender: String,
+    pub content: Option<String>,
+    pub is_unsent: bool,
+    pub call_duration: Option<i64>,
+    pub media: Vec<UiMedia>,
+    pub reactions: Vec<(String, String)>,
+}
+
+/// Media reference carrying an opaque id and a render hint, never a path.
+#[derive(Debug, Clone)]
+pub struct UiMedia {
+    pub media_id: i64,
+    pub kind: String,
+    pub available: bool,
+    pub content_type: Option<&'static str>,
+}
+
+/// Messages of one month in display order: (ts_ms ASC, seq DESC).
+pub fn month_messages(conn: &Connection, key: &str, month: &str) -> Result<Vec<UiMessage>, String> {
+    let mut st = conn
+        .prepare(
+            "SELECT m.id, m.seq, m.ts_ms, m.month, m.sender, m.content, m.is_unsent,
+                    m.call_duration
+             FROM messages m JOIN threads t ON t.id = m.thread_id
+             WHERE t.key = ?1 AND m.month = ?2
+             ORDER BY m.ts_ms ASC, m.seq DESC",
+        )
+        .map_err(|e| e.to_string())?;
+    let mut base = st
+        .query_map([key, month], |r| {
+            Ok(UiMessage {
+                id: r.get(0)?,
+                seq: r.get(1)?,
+                ts_ms: r.get(2)?,
+                month: r.get(3)?,
+                sender: r.get(4)?,
+                content: r.get(5)?,
+                is_unsent: r.get::<_, i64>(6)? != 0,
+                call_duration: r.get(7)?,
+                media: Vec::new(),
+                reactions: Vec::new(),
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<UiMessage>, _>>()
+        .map_err(|e| e.to_string())?;
+    drop(st);
+
+    let mut by_id: std::collections::HashMap<i64, usize> = std::collections::HashMap::new();
+    for (i, m) in base.iter().enumerate() {
+        by_id.insert(m.id, i);
+    }
+
+    if let Ok(mut ms) = conn.prepare(
+        "SELECT m.message_id, m.id, m.kind, m.status
+         FROM media m JOIN messages msg ON msg.id = m.message_id
+         JOIN threads t ON t.id = msg.thread_id WHERE t.key = ?1",
+    ) {
+        let list = ms
+            .query_map([key], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        for (msg_id, media_id, kind, status) in list {
+            if let Some(i) = by_id.get(&msg_id) {
+                base[*i].media.push(UiMedia {
+                    media_id,
+                    kind,
+                    available: status == "ok",
+                    content_type: None,
+                });
+            }
+        }
+    }
+    if let Ok(mut rs) = conn.prepare(
+        "SELECT r.message_id, r.actor, r.reaction
+         FROM reactions r JOIN messages m ON m.id = r.message_id
+         JOIN threads t ON t.id = m.thread_id WHERE t.key = ?1",
+    ) {
+        let list = rs
+            .query_map([key], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        for (msg_id, actor, reaction) in list {
+            if let Some(i) = by_id.get(&msg_id) {
+                base[*i].reactions.push((actor, reaction));
+            }
+        }
+    }
+    Ok(base)
+}
+
+/// Month key containing `ts_ms`, using the archive's stored timezone.
+pub fn month_of_ts(conn: &Connection, ts_ms: i64) -> Option<String> {
+    // Resolve via the stored month column: pick the bucket whose range covers it.
+    let mut st = conn
+        .prepare(
+            "SELECT DISTINCT month FROM messages WHERE ts_ms <= ?1
+             ORDER BY ts_ms DESC LIMIT 1",
+        )
+        .ok()?;
+    st.query_row([ts_ms], |r| r.get(0)).ok()
+}
+
+/// The archive's stored timezone name.
+pub fn timezone(conn: &Connection) -> Option<String> {
+    meta(conn, "timezone")
+}
+
 /// Test/diagnostic helper: does an archive exist?
 pub fn exists(dir: &Path, id: &str) -> bool {
     validate_id(id).is_ok() && db_path(dir, id).exists()
