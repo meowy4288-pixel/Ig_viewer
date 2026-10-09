@@ -25,4 +25,15 @@ Hard rules:
   write into it.
 - The webview never receives a filesystem path: media is referenced by opaque id.
 - delete_index accepts only a 32-char lowercase hex archive id; it never takes a path.
+- Media is served to the webview over the custom `igmedia:` scheme as
+  igmedia://media/<archive_id>/<media_row_id> -- opaque ids only. The webview never
+  sees a filesystem path, an export URI or a filename.
+- igmedia containment order matters: resolve (reject .. and absolute; walk EVERY
+  component with symlink_metadata refusing symlinks; O_NOFOLLOW; fstat re-verify)
+  FIRST, then the MIME allowlist.
+- igmedia MIME allowlist is deny-by-default and excludes text/html and image/svg+xml,
+  which could execute script in the app origin. Every response carries
+  X-Content-Type-Options: nosniff and Cache-Control: no-store.
+- The export root for a media request comes from the archive's own meta table, never
+  from the request, so a forged id cannot steer resolution.
 - Verify framework APIs against current Tauri 2 docs before using them.

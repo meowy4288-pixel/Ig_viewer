@@ -5,6 +5,7 @@ pub mod db;
 pub mod ingest;
 pub mod media;
 pub mod picker;
+pub mod protocol;
 pub mod scan;
 pub mod text;
 
@@ -13,7 +14,7 @@ use std::path::{Path, PathBuf};
 use picker::{FolderPicker, NativeFolderPicker};
 
 /// Archives dir: `<app_data_dir>/archives`. One DB per archive.
-fn archives_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+fn archives_dir<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
     let dir = app
         .path()
         .app_data_dir()
@@ -80,34 +81,20 @@ fn index_archive(
 
     let mut stored_threads = 0usize;
     let mut stored_messages = 0usize;
+    let mut stored_files = 0usize;
+    let mut parse_failures = 0usize;
     for t in &scan.threads {
-        let mut files: Vec<(u32, Vec<ingest::RawMessage>)> = Vec::new();
-        let mut title = String::new();
-        let mut participants = Vec::new();
-        for path in &t.files {
-            let bytes = match scan::read_bounded(path) {
-                Ok(b) => b,
-                Err(_) => continue, // already counted by the scanner
-            };
-            let parsed = match ingest::parse_thread_file(&bytes) {
-                Ok(p) => p,
-                Err(_) => continue,
-            };
-            if title.is_empty() {
-                title = parsed.title.clone();
-                participants = parsed.participants.iter().map(|p| p.name.clone()).collect();
-            }
-            let no = t
-                .files
-                .iter()
-                .position(|p| p == path)
-                .map(|i| i as u32 + 1)
-                .unwrap_or(0);
-            files.push((no, parsed.messages));
-        }
-        // Re-number from actual filenames rather than enumeration position.
-        files = renumber(&t.files, &root)?;
+        // renumber() sorts by the parsed filename number and returns
+        // (file_no, messages) plus the title/participants from the first file that
+        // parsed, so there is exactly one pass over the bytes.
+        let Some(parsed) = renumber(&t.files, &mut parse_failures) else {
+            continue;
+        };
+        let (files, title, participants, ok_files) = parsed;
+        stored_files += ok_files;
         if files.is_empty() {
+            // Every file in this thread failed to parse: the thread is still
+            // registered, with zero messages.
             continue;
         }
         let thread = ingest::ingest_thread(&title, &participants, &files);
@@ -128,7 +115,8 @@ fn index_archive(
         "archive_id": archive_id,
         "threads": stored_threads,
         "messages": stored_messages,
-        "skipped_files": scan.total_skipped(),
+        "skipped_files": scan.total_skipped() + parse_failures,
+        "parsed_files": stored_files,
         "skip_reasons": scan.skipped.iter()
             .map(|(r, n)| serde_json::json!({"reason": r.code(), "count": n}))
             .collect::<Vec<_>>(),
@@ -139,24 +127,50 @@ fn index_archive(
     Ok(summary.to_string())
 }
 
-/// `(file_no, messages)` using the real parsed filename numbers.
-fn renumber(paths: &[PathBuf], root: &Path) -> Result<Vec<(u32, Vec<ingest::RawMessage>)>, String> {
+/// One thread's files, parsed in filename-number order.
+type ParsedThread = (
+    Vec<(u32, Vec<ingest::RawMessage>)>,
+    String,
+    Vec<String>,
+    usize,
+);
+
+/// Parse one thread's files in a single pass.
+///
+/// Returns `(files, title, participants, ok_count)`, where `files` is sorted by the
+/// parsed filename number (so `message_10` follows `message_9`). `parse_failures` is
+/// incremented for every file that could not be read or parsed.
+fn renumber(paths: &[PathBuf], parse_failures: &mut usize) -> Option<ParsedThread> {
     let mut numbered: Vec<(u32, &PathBuf)> = Vec::new();
     for p in paths {
-        let name = p.file_name().and_then(|n| n.to_str()).ok_or("bad-name")?;
-        let no = scan::parse_file_number(name).map_err(|_| "bad-name".to_string())?;
+        let name = p.file_name().and_then(|n| n.to_str())?;
+        let no = scan::parse_file_number(name).ok()?;
         numbered.push((no, p));
     }
     numbered.sort_by_key(|(n, _)| *n);
-    let mut out = Vec::new();
+
+    let mut files = Vec::new();
+    let mut title = String::new();
+    let mut participants = Vec::new();
+    let mut ok = 0usize;
     for (no, p) in numbered {
-        let bytes = scan::read_bounded(p).map_err(|_| "read-failed".to_string())?;
-        if let Ok(parsed) = ingest::parse_thread_file(&bytes) {
-            out.push((no, parsed.messages));
+        let Ok(bytes) = scan::read_bounded(p) else {
+            *parse_failures += 1;
+            continue;
+        };
+        match ingest::parse_thread_file(&bytes) {
+            Ok(parsed) => {
+                if title.is_empty() {
+                    title = parsed.title.clone();
+                    participants = parsed.participants.iter().map(|p| p.name.clone()).collect();
+                }
+                ok += 1;
+                files.push((no, parsed.messages));
+            }
+            Err(_) => *parse_failures += 1,
         }
     }
-    let _ = root;
-    Ok(out)
+    Some((files, title, participants, ok))
 }
 
 /// Change the stored timezone and re-bucket months from stored timestamps only.
@@ -262,6 +276,106 @@ fn new_archive_id() -> String {
     format!("{mixed:032x}")
 }
 
+/// `igmedia:` protocol handler.
+///
+/// Serves media strictly by opaque id. The webview supplies `<archive_id>` and
+/// `<media_row_id>` only; the export root and the media URI both come from the
+/// archive's own database, so nothing path-like crosses the boundary.
+///
+/// Responses always carry `X-Content-Type-Options: nosniff` and `Cache-Control:
+/// no-store`, and error bodies are a fixed sanitised string.
+fn igmedia_handler<R: tauri::Runtime>(
+    ctx: tauri::UriSchemeContext<'_, R>,
+    request: tauri::http::Request<Vec<u8>>,
+    responder: tauri::UriSchemeResponder,
+) {
+    use tauri::http::{header, Response, StatusCode};
+
+    let dir = match archives_dir(ctx.app_handle()) {
+        Ok(d) => d,
+        Err(_) => {
+            respond_error(responder, 500);
+            return;
+        }
+    };
+
+    let parsed = protocol::parse_media_url(request.uri().path());
+    let range = request
+        .headers()
+        .get(header::RANGE)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
+
+    let result = match parsed {
+        Ok((archive_id, media_id)) => {
+            protocol::serve(&dir, &archive_id, media_id, range.as_deref())
+        }
+        Err(e) => Err(e),
+    };
+
+    match result {
+        Ok(m) => {
+            let body_len = m.body.len() as u64;
+            let mut b = Response::new(m.body);
+            *b.status_mut() = if m.partial {
+                StatusCode::PARTIAL_CONTENT
+            } else {
+                StatusCode::OK
+            };
+            let h = b.headers_mut();
+            h.insert(
+                header::CONTENT_TYPE,
+                header::HeaderValue::from_static(m.content_type),
+            );
+            h.insert(
+                header::ACCEPT_RANGES,
+                header::HeaderValue::from_static("bytes"),
+            );
+            h.insert(
+                header::HeaderName::from_static("x-content-type-options"),
+                header::HeaderValue::from_static("nosniff"),
+            );
+            h.insert(
+                header::CACHE_CONTROL,
+                header::HeaderValue::from_static("no-store"),
+            );
+            if m.partial {
+                if let Ok(v) = header::HeaderValue::from_str(&format!(
+                    "bytes {}-{}/{}",
+                    m.range_start,
+                    m.range_start + body_len - 1,
+                    m.total_len
+                )) {
+                    h.insert(header::CONTENT_RANGE, v);
+                }
+            }
+            responder.respond(b);
+        }
+        Err(e) => {
+            // Aggregate counters only: never the URI, the path or the id.
+            log::warn!("igmedia request refused: status={}", e.status());
+            respond_error(responder, e.status());
+        }
+    }
+}
+
+/// A fixed body for every failure, so an error response never describes the file.
+fn respond_error(responder: tauri::UriSchemeResponder, status: u16) {
+    use tauri::http::{header, Response, StatusCode};
+    let mut b = Response::new(b"media unavailable".to_vec());
+    *b.status_mut() = StatusCode::from_u16(status).unwrap_or(StatusCode::FORBIDDEN);
+    let h = b.headers_mut();
+    h.insert(
+        header::HeaderName::from_static("x-content-type-options"),
+        header::HeaderValue::from_static("nosniff"),
+    );
+    h.insert(
+        header::CONTENT_TYPE,
+        header::HeaderValue::from_static("text/plain; charset=utf-8"),
+    );
+    responder.respond(b);
+}
+
 // ---------------------------------------------------------------- app setup
 
 /// Allow only the app's own origin and, later, the local media protocol.
@@ -297,6 +411,7 @@ fn allow_dev_server(_url: &tauri::Url) -> bool {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .register_asynchronous_uri_scheme_protocol("igmedia", igmedia_handler)
         .invoke_handler(tauri::generate_handler![
             app_info,
             pick_export_folder,
