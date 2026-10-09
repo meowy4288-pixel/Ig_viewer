@@ -1,0 +1,3652 @@
+{
+  "seed": 1337,
+  "tz": "Europe/Warsaw",
+  "rules": {
+    "ord": "ord = (file number, index within that file); each message_N.json stores messages newest-first",
+    "display_sort": "(timestamp_ms ASC, ord DESC) - for equal timestamps the higher index within a file displays first",
+    "dedupe": "a message from file N is dropped only if its key (timestamp_ms, sender_name, content, media URIs) already appeared in a LOWER-numbered file; identical messages within ONE file are all kept; first-encountered copy wins; reactions are not part of the key"
+  },
+  "threads": [
+    {
+      "assertions": {
+        "dropped": [
+          {
+            "id": "m0148",
+            "dropped": "file4:idx6",
+            "kept": "file2:idx0",
+            "reason": "later-file-copy"
+          },
+          {
+            "id": "m0085",
+            "dropped": "file5:idx1",
+            "kept": "file4:idx0",
+            "reason": "cross-file-duplicate"
+          },
+          {
+            "id": "m0084",
+            "dropped": "file5:idx2",
+            "kept": "file4:idx1",
+            "reason": "cross-file-duplicate"
+          },
+          {
+            "id": "m0083",
+            "dropped": "file5:idx3",
+            "kept": "file4:idx2",
+            "reason": "cross-file-duplicate"
+          },
+          {
+            "id": "m0082",
+            "dropped": "file5:idx4",
+            "kept": "file4:idx3",
+            "reason": "cross-file-duplicate"
+          },
+          {
+            "id": "m0081",
+            "dropped": "file5:idx5",
+            "kept": "file4:idx4",
+            "reason": "cross-file-duplicate"
+          },
+          {
+            "id": "m0080",
+            "dropped": "file5:idx6",
+            "kept": "file4:idx5",
+            "reason": "cross-file-duplicate"
+          },
+          {
+            "id": "m0150",
+            "dropped": "file6:idx0",
+            "kept": "file5:idx0",
+            "reason": "cross-file-reactions"
+          }
+        ],
+        "within_file_dupes_kept": [
+          {
+            "id": "m0146",
+            "ord": {
+              "file": 2,
+              "index": 1
+            }
+          },
+          {
+            "id": "m0147",
+            "ord": {
+              "file": 2,
+              "index": 0
+            }
+          }
+        ],
+        "missing_media": [
+          {
+            "id": "m0042",
+            "media_index": 0,
+            "uri": "your_instagram_activity/messages/inbox/mira_okonkwo_4821/photos/deleted_41.jpg",
+            "note": "referenced but not written to disk"
+          }
+        ],
+        "traversal_rejected": [
+          {
+            "id": "m0044",
+            "media_index": 0,
+            "uri": "../../../../etc/passwd"
+          },
+          {
+            "id": "m0057",
+            "media_index": 0,
+            "uri": "your_instagram_activity/messages/inbox/mira_okonkwo_4821/photos/../../../evil.png"
+          }
+        ],
+        "bare_filename_media": [
+          {
+            "id": "m0043",
+            "media_index": 0,
+            "uri": "bare_clip_42.mp4",
+            "note": "resolved by basename fallback"
+          }
+        ],
+        "hostile_media": [
+          {
+            "id": "m0056",
+            "media_index": 0,
+            "uri": "your_instagram_activity/messages/inbox/mira_okonkwo_4821/photos/evil_55.html",
+            "note": "must be rejected by M4's MIME allowlist"
+          },
+          {
+            "id": "m0056",
+            "media_index": 1,
+            "uri": "your_instagram_activity/messages/inbox/mira_okonkwo_4821/photos/script_55.svg",
+            "note": "must be rejected by M4's MIME allowlist"
+          }
+        ],
+        "calendar_fixtures": [
+          {
+            "id": "m0155",
+            "utc": "2024-01-31T22:59:59Z",
+            "local": "2024-01-31 23:59:59+0100",
+            "month": "2024-01",
+            "fixture": "month-boundary"
+          },
+          {
+            "id": "m0156",
+            "utc": "2024-01-31T23:00:01Z",
+            "local": "2024-02-01 00:00:01+0100",
+            "month": "2024-02",
+            "fixture": "month-boundary"
+          },
+          {
+            "id": "m0157",
+            "utc": "2024-02-29T11:00:00Z",
+            "local": "2024-02-29 12:00:00+0100",
+            "month": "2024-02",
+            "fixture": "leap-day"
+          },
+          {
+            "id": "m0151",
+            "utc": "2024-03-31T00:30:00Z",
+            "local": "2024-03-31 01:30:00+0100",
+            "month": "2024-03",
+            "fixture": "dst"
+          },
+          {
+            "id": "m0152",
+            "utc": "2024-03-31T01:30:00Z",
+            "local": "2024-03-31 03:30:00+0200",
+            "month": "2024-03",
+            "fixture": "dst"
+          },
+          {
+            "id": "m0153",
+            "utc": "2024-10-27T00:30:00Z",
+            "local": "2024-10-27 02:30:00+0200",
+            "month": "2024-10",
+            "fixture": "dst"
+          },
+          {
+            "id": "m0154",
+            "utc": "2024-10-27T01:30:00Z",
+            "local": "2024-10-27 02:30:00+0100",
+            "month": "2024-10",
+            "fixture": "dst"
+          },
+          {
+            "id": "m0158",
+            "utc": "2024-12-31T22:59:59Z",
+            "local": "2024-12-31 23:59:59+0100",
+            "month": "2024-12",
+            "fixture": "year-boundary"
+          }
+        ]
+      },
+      "key": "mira_okonkwo_4821",
+      "title": "Mira Okonkwo",
+      "participants": [
+        "Mira Okonkwo",
+        "Kai Lindqvist"
+      ],
+      "file_count": 12,
+      "raw_count": 165,
+      "message_count": 157,
+      "months": [
+        {
+          "key": "2024-01",
+          "count": 149,
+          "first_ts_ms": 1704413318338,
+          "last_ts_ms": 1706741999000
+        },
+        {
+          "key": "2024-02",
+          "count": 2,
+          "first_ts_ms": 1706742001000,
+          "last_ts_ms": 1709204400000
+        },
+        {
+          "key": "2024-03",
+          "count": 2,
+          "first_ts_ms": 1711845000000,
+          "last_ts_ms": 1711848600000
+        },
+        {
+          "key": "2024-10",
+          "count": 2,
+          "first_ts_ms": 1729989000000,
+          "last_ts_ms": 1729992600000
+        },
+        {
+          "key": "2024-12",
+          "count": 1,
+          "first_ts_ms": 1735685999000,
+          "last_ts_ms": 1735685999000
+        },
+        {
+          "key": "2025-01",
+          "count": 1,
+          "first_ts_ms": 1735686001000,
+          "last_ts_ms": 1735686001000
+        }
+      ],
+      "order": [
+        {
+          "id": "m0001",
+          "ts_ms": 1704413318338,
+          "ord": {
+            "file": 12,
+            "index": 6
+          },
+          "sender": "Kai Lindqvist",
+          "content": "Ana O'Brien-\u015awi\u0105tek",
+          "utc": "2024-01-05T00:08:38Z",
+          "local": "2024-01-05 01:08:38+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0002",
+          "ts_ms": 1704416147471,
+          "ord": {
+            "file": 12,
+            "index": 5
+          },
+          "sender": "Mira Okonkwo",
+          "content": "ack",
+          "utc": "2024-01-05T00:55:47Z",
+          "local": "2024-01-05 01:55:47+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0003",
+          "ts_ms": 1704420204687,
+          "ord": {
+            "file": 12,
+            "index": 4
+          },
+          "sender": "Mira Okonkwo",
+          "content": "\u65e5\u672c\u8a9e\u3082Visa",
+          "utc": "2024-01-05T02:03:24Z",
+          "local": "2024-01-05 03:03:24+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0142",
+          "ts_ms": 1704423612345,
+          "ord": {
+            "file": 1,
+            "index": 3
+          },
+          "sender": "Mira Okonkwo",
+          "content": "tie A first written",
+          "utc": "2024-01-05T03:00:12Z",
+          "local": "2024-01-05 04:00:12+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0143",
+          "ts_ms": 1704423612345,
+          "ord": {
+            "file": 1,
+            "index": 2
+          },
+          "sender": "Mira Okonkwo",
+          "content": "tie B second written",
+          "utc": "2024-01-05T03:00:12Z",
+          "local": "2024-01-05 04:00:12+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0144",
+          "ts_ms": 1704423612345,
+          "ord": {
+            "file": 1,
+            "index": 1
+          },
+          "sender": "Kai Lindqvist",
+          "content": "tie C from me",
+          "utc": "2024-01-05T03:00:12Z",
+          "local": "2024-01-05 04:00:12+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0145",
+          "ts_ms": 1704423612345,
+          "ord": {
+            "file": 1,
+            "index": 0
+          },
+          "sender": "Kai Lindqvist",
+          "content": "tie D from me, same sender as C",
+          "utc": "2024-01-05T03:00:12Z",
+          "local": "2024-01-05 04:00:12+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0004",
+          "ts_ms": 1704423645153,
+          "ord": {
+            "file": 12,
+            "index": 3
+          },
+          "sender": "Kai Lindqvist",
+          "content": "\u041f\u0440\u0438\u0432\u0435\u0442, \u043a\u0430\u043a \u0434\u0435\u043b\u0430?",
+          "utc": "2024-01-05T03:00:45Z",
+          "local": "2024-01-05 04:00:45+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0005",
+          "ts_ms": 1704427029802,
+          "ord": {
+            "file": 12,
+            "index": 2
+          },
+          "sender": "Mira Okonkwo",
+          "content": "\u0645\u0631\u062d\u0628\u0627, \u0643\u064a\u0641 \u062d\u0627\u0644\u0643\u061f",
+          "utc": "2024-01-05T03:57:09Z",
+          "local": "2024-01-05 04:57:09+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0006",
+          "ts_ms": 1704430429194,
+          "ord": {
+            "file": 12,
+            "index": 1
+          },
+          "sender": "Mira Okonkwo",
+          "content": "\u041f\u0440\u0438\u0432\u0435\u0442, \u043a\u0430\u043a \u0434\u0435\u043b\u0430?",
+          "utc": "2024-01-05T04:53:49Z",
+          "local": "2024-01-05 05:53:49+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0146",
+          "ts_ms": 1704430800999,
+          "ord": {
+            "file": 2,
+            "index": 1
+          },
+          "sender": "Mira Okonkwo",
+          "content": "identical within one file",
+          "utc": "2024-01-05T05:00:00Z",
+          "local": "2024-01-05 06:00:00+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0147",
+          "ts_ms": 1704430800999,
+          "ord": {
+            "file": 2,
+            "index": 0
+          },
+          "sender": "Mira Okonkwo",
+          "content": "identical within one file",
+          "utc": "2024-01-05T05:00:00Z",
+          "local": "2024-01-05 06:00:00+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0007",
+          "ts_ms": 1704434636216,
+          "ord": {
+            "file": 12,
+            "index": 0
+          },
+          "sender": "Kai Lindqvist",
+          "content": "emoji test \ud83c\udf89",
+          "utc": "2024-01-05T06:03:56Z",
+          "local": "2024-01-05 07:03:56+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0149",
+          "ts_ms": 1704438004242,
+          "ord": {
+            "file": 5,
+            "index": 0
+          },
+          "sender": "Mira Okonkwo",
+          "content": "cross file identical except reactions",
+          "utc": "2024-01-05T07:00:04Z",
+          "local": "2024-01-05 08:00:04+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0008",
+          "ts_ms": 1704438459886,
+          "ord": {
+            "file": 11,
+            "index": 12
+          },
+          "sender": "Mira Okonkwo",
+          "content": "the build is green again",
+          "utc": "2024-01-05T07:07:39Z",
+          "local": "2024-01-05 08:07:39+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0009",
+          "ts_ms": 1704441846384,
+          "ord": {
+            "file": 11,
+            "index": 11
+          },
+          "sender": "Mira Okonkwo",
+          "content": "\u041f\u0440\u0438\u0432\u0435\u0442, \u043a\u0430\u043a \u0434\u0435\u043b\u0430?",
+          "utc": "2024-01-05T08:04:06Z",
+          "local": "2024-01-05 09:04:06+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0010",
+          "ts_ms": 1704445251899,
+          "ord": {
+            "file": 11,
+            "index": 10
+          },
+          "sender": "Kai Lindqvist",
+          "content": "\u0645\u0631\u062d\u0628\u0627, \u0643\u064a\u0641 \u062d\u0627\u0644\u0643\u061f",
+          "utc": "2024-01-05T09:00:51Z",
+          "local": "2024-01-05 10:00:51+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0011",
+          "ts_ms": 1704448940650,
+          "ord": {
+            "file": 11,
+            "index": 9
+          },
+          "sender": "Mira Okonkwo",
+          "content": "ship it",
+          "utc": "2024-01-05T10:02:20Z",
+          "local": "2024-01-05 11:02:20+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0012",
+          "ts_ms": 1704452048590,
+          "ord": {
+            "file": 11,
+            "index": 8
+          },
+          "sender": "Mira Okonkwo",
+          "content": "ty!",
+          "utc": "2024-01-05T10:54:08Z",
+          "local": "2024-01-05 11:54:08+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0013",
+          "ts_ms": 1704455916697,
+          "ord": {
+            "file": 11,
+            "index": 7
+          },
+          "sender": "Kai Lindqvist",
+          "content": "family emoji \ud83d\ude00\ud83c\udf82",
+          "utc": "2024-01-05T11:58:36Z",
+          "local": "2024-01-05 12:58:36+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0014",
+          "ts_ms": 1704459657935,
+          "ord": {
+            "file": 11,
+            "index": 6
+          },
+          "sender": "Mira Okonkwo",
+          "content": "let's split the refactor",
+          "utc": "2024-01-05T13:00:57Z",
+          "local": "2024-01-05 14:00:57+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0015",
+          "ts_ms": 1704463558728,
+          "ord": {
+            "file": 11,
+            "index": 5
+          },
+          "sender": "Mira Okonkwo",
+          "content": "ty!",
+          "utc": "2024-01-05T14:05:58Z",
+          "local": "2024-01-05 15:05:58+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0016",
+          "ts_ms": 1704466755443,
+          "ord": {
+            "file": 11,
+            "index": 4
+          },
+          "sender": "Kai Lindqvist",
+          "content": "ty!",
+          "utc": "2024-01-05T14:59:15Z",
+          "local": "2024-01-05 15:59:15+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0017",
+          "ts_ms": 1704470948730,
+          "ord": {
+            "file": 11,
+            "index": 3
+          },
+          "sender": "Mira Okonkwo",
+          "content": "ping me when free",
+          "utc": "2024-01-05T16:09:08Z",
+          "local": "2024-01-05 17:09:08+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0018",
+          "ts_ms": 1704474501934,
+          "ord": {
+            "file": 11,
+            "index": 2
+          },
+          "sender": "Mira Okonkwo",
+          "content": "caf\u00e9",
+          "utc": "2024-01-05T17:08:21Z",
+          "local": "2024-01-05 18:08:21+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0019",
+          "ts_ms": 1704477854526,
+          "ord": {
+            "file": 11,
+            "index": 1
+          },
+          "sender": "Kai Lindqvist",
+          "content": "the build is green again",
+          "utc": "2024-01-05T18:04:14Z",
+          "local": "2024-01-05 19:04:14+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0020",
+          "ts_ms": 1704480712894,
+          "ord": {
+            "file": 11,
+            "index": 0
+          },
+          "sender": "Mira Okonkwo",
+          "content": "ty!",
+          "utc": "2024-01-05T18:51:52Z",
+          "local": "2024-01-05 19:51:52+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0021",
+          "ts_ms": 1704484612760,
+          "ord": {
+            "file": 10,
+            "index": 12
+          },
+          "sender": "Mira Okonkwo",
+          "content": "ship it",
+          "utc": "2024-01-05T19:56:52Z",
+          "local": "2024-01-05 20:56:52+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0022",
+          "ts_ms": 1704488019341,
+          "ord": {
+            "file": 10,
+            "index": 11
+          },
+          "sender": "Kai Lindqvist",
+          "content": "ping me when free",
+          "utc": "2024-01-05T20:53:39Z",
+          "local": "2024-01-05 21:53:39+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0023",
+          "ts_ms": 1704491812247,
+          "ord": {
+            "file": 10,
+            "index": 10
+          },
+          "sender": "Mira Okonkwo",
+          "content": "ok, sounds good",
+          "utc": "2024-01-05T21:56:52Z",
+          "local": "2024-01-05 22:56:52+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0024",
+          "ts_ms": 1704496192604,
+          "ord": {
+            "file": 10,
+            "index": 9
+          },
+          "sender": "Mira Okonkwo",
+          "content": "family emoji \ud83d\ude00\ud83c\udf82",
+          "utc": "2024-01-05T23:09:52Z",
+          "local": "2024-01-06 00:09:52+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0025",
+          "ts_ms": 1704498626142,
+          "ord": {
+            "file": 10,
+            "index": 8
+          },
+          "sender": "Kai Lindqvist",
+          "content": "\u65e5\u672c\u8a9e\u3082Visa",
+          "utc": "2024-01-05T23:50:26Z",
+          "local": "2024-01-06 00:50:26+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0026",
+          "ts_ms": 1704502899593,
+          "ord": {
+            "file": 10,
+            "index": 7
+          },
+          "sender": "Mira Okonkwo",
+          "content": "ty!",
+          "utc": "2024-01-06T01:01:39Z",
+          "local": "2024-01-06 02:01:39+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0027",
+          "ts_ms": 1704506999799,
+          "ord": {
+            "file": 10,
+            "index": 6
+          },
+          "sender": "Mira Okonkwo",
+          "content": "emoji test \ud83c\udf89",
+          "utc": "2024-01-06T02:09:59Z",
+          "local": "2024-01-06 03:09:59+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0028",
+          "ts_ms": 1704510552614,
+          "ord": {
+            "file": 10,
+            "index": 5
+          },
+          "sender": "Kai Lindqvist",
+          "content": "bringing snacks",
+          "utc": "2024-01-06T03:09:12Z",
+          "local": "2024-01-06 04:09:12+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0029",
+          "ts_ms": 1704514164779,
+          "ord": {
+            "file": 10,
+            "index": 4
+          },
+          "sender": "Mira Okonkwo",
+          "content": "lunch?",
+          "utc": "2024-01-06T04:09:24Z",
+          "local": "2024-01-06 05:09:24+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0030",
+          "ts_ms": 1704517048057,
+          "ord": {
+            "file": 10,
+            "index": 3
+          },
+          "sender": "Mira Okonkwo",
+          "content": "ok, sounds good",
+          "utc": "2024-01-06T04:57:28Z",
+          "local": "2024-01-06 05:57:28+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0031",
+          "ts_ms": 1704520579153,
+          "ord": {
+            "file": 10,
+            "index": 2
+          },
+          "sender": "Kai Lindqvist",
+          "content": "ty!",
+          "utc": "2024-01-06T05:56:19Z",
+          "local": "2024-01-06 06:56:19+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0032",
+          "ts_ms": 1704524904598,
+          "ord": {
+            "file": 10,
+            "index": 1
+          },
+          "sender": "Mira Okonkwo",
+          "content": "I'll bring the docs",
+          "utc": "2024-01-06T07:08:24Z",
+          "local": "2024-01-06 08:08:24+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0033",
+          "ts_ms": 1704527787946,
+          "ord": {
+            "file": 10,
+            "index": 0
+          },
+          "sender": "Mira Okonkwo",
+          "content": "I'll bring the docs",
+          "utc": "2024-01-06T07:56:27Z",
+          "local": "2024-01-06 08:56:27+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0034",
+          "ts_ms": 1704532037376,
+          "ord": {
+            "file": 9,
+            "index": 12
+          },
+          "sender": "Kai Lindqvist",
+          "content": "lunch?",
+          "utc": "2024-01-06T09:07:17Z",
+          "local": "2024-01-06 10:07:17+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0035",
+          "ts_ms": 1704535554593,
+          "ord": {
+            "file": 9,
+            "index": 11
+          },
+          "sender": "Mira Okonkwo",
+          "content": "caf\u00e9",
+          "utc": "2024-01-06T10:05:54Z",
+          "local": "2024-01-06 11:05:54+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0036",
+          "ts_ms": 1704539222544,
+          "ord": {
+            "file": 9,
+            "index": 10
+          },
+          "sender": "Mira Okonkwo",
+          "content": "I'll bring the docs",
+          "utc": "2024-01-06T11:07:02Z",
+          "local": "2024-01-06 12:07:02+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0037",
+          "ts_ms": 1704542539474,
+          "ord": {
+            "file": 9,
+            "index": 9
+          },
+          "sender": "Kai Lindqvist",
+          "content": "deploy window is 02:00",
+          "utc": "2024-01-06T12:02:19Z",
+          "local": "2024-01-06 13:02:19+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0038",
+          "ts_ms": 1704546593228,
+          "ord": {
+            "file": 9,
+            "index": 8
+          },
+          "sender": "Mira Okonkwo",
+          "content": "deploy window is 02:00",
+          "utc": "2024-01-06T13:09:53Z",
+          "local": "2024-01-06 14:09:53+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0039",
+          "ts_ms": 1704549548991,
+          "ord": {
+            "file": 9,
+            "index": 7
+          },
+          "sender": "Mira Okonkwo",
+          "content": "that bug was a typo",
+          "utc": "2024-01-06T13:59:08Z",
+          "local": "2024-01-06 14:59:08+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0040",
+          "ts_ms": 1704552873658,
+          "ord": {
+            "file": 9,
+            "index": 6
+          },
+          "sender": "Kai Lindqvist",
+          "content": "the build is green again",
+          "utc": "2024-01-06T14:54:33Z",
+          "local": "2024-01-06 15:54:33+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0041",
+          "ts_ms": 1704556556757,
+          "ord": {
+            "file": 9,
+            "index": 5
+          },
+          "sender": "Mira Okonkwo",
+          "content": "lunch?",
+          "utc": "2024-01-06T15:55:56Z",
+          "local": "2024-01-06 16:55:56+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0042",
+          "ts_ms": 1704559964470,
+          "ord": {
+            "file": 9,
+            "index": 4
+          },
+          "sender": "Mira Okonkwo",
+          "content": "\u65e5\u672c\u8a9e\u3082Visa",
+          "utc": "2024-01-06T16:52:44Z",
+          "local": "2024-01-06 17:52:44+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0043",
+          "ts_ms": 1704564321612,
+          "ord": {
+            "file": 9,
+            "index": 3
+          },
+          "sender": "Kai Lindqvist",
+          "content": "ping me when free",
+          "utc": "2024-01-06T18:05:21Z",
+          "local": "2024-01-06 19:05:21+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0044",
+          "ts_ms": 1704567530680,
+          "ord": {
+            "file": 9,
+            "index": 2
+          },
+          "sender": "Mira Okonkwo",
+          "content": "deploy window is 02:00",
+          "utc": "2024-01-06T18:58:50Z",
+          "local": "2024-01-06 19:58:50+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0045",
+          "ts_ms": 1704571762944,
+          "ord": {
+            "file": 9,
+            "index": 1
+          },
+          "sender": "Mira Okonkwo",
+          "content": "lunch?",
+          "utc": "2024-01-06T20:09:22Z",
+          "local": "2024-01-06 21:09:22+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0046",
+          "ts_ms": 1704575095600,
+          "ord": {
+            "file": 9,
+            "index": 0
+          },
+          "sender": "Kai Lindqvist",
+          "content": "na\u00efve approach",
+          "utc": "2024-01-06T21:04:55Z",
+          "local": "2024-01-06 22:04:55+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0047",
+          "ts_ms": 1704577889865,
+          "ord": {
+            "file": 8,
+            "index": 12
+          },
+          "sender": "Mira Okonkwo",
+          "content": "\u041f\u0440\u0438\u0432\u0435\u0442, \u043a\u0430\u043a \u0434\u0435\u043b\u0430?",
+          "utc": "2024-01-06T21:51:29Z",
+          "local": "2024-01-06 22:51:29+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0048",
+          "ts_ms": 1704582002939,
+          "ord": {
+            "file": 8,
+            "index": 11
+          },
+          "sender": "Mira Okonkwo",
+          "content": "emoji test \ud83c\udf89",
+          "utc": "2024-01-06T23:00:02Z",
+          "local": "2024-01-07 00:00:02+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0049",
+          "ts_ms": 1704585117347,
+          "ord": {
+            "file": 8,
+            "index": 10
+          },
+          "sender": "Kai Lindqvist",
+          "content": "na\u00efve approach",
+          "utc": "2024-01-06T23:51:57Z",
+          "local": "2024-01-07 00:51:57+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0050",
+          "ts_ms": 1704589328341,
+          "ord": {
+            "file": 8,
+            "index": 9
+          },
+          "sender": "Mira Okonkwo",
+          "content": "family emoji \ud83d\ude00\ud83c\udf82",
+          "utc": "2024-01-07T01:02:08Z",
+          "local": "2024-01-07 02:02:08+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0051",
+          "ts_ms": 1704592343464,
+          "ord": {
+            "file": 8,
+            "index": 8
+          },
+          "sender": "Mira Okonkwo",
+          "content": "\u0645\u0631\u062d\u0628\u0627, \u0643\u064a\u0641 \u062d\u0627\u0644\u0643\u061f",
+          "utc": "2024-01-07T01:52:23Z",
+          "local": "2024-01-07 02:52:23+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0052",
+          "ts_ms": 1704596539081,
+          "ord": {
+            "file": 8,
+            "index": 7
+          },
+          "sender": "Kai Lindqvist",
+          "content": "this text stays but the message is unsent",
+          "utc": "2024-01-07T03:02:19Z",
+          "local": "2024-01-07 04:02:19+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0053",
+          "ts_ms": 1704599801650,
+          "ord": {
+            "file": 8,
+            "index": 6
+          },
+          "sender": "Mira Okonkwo",
+          "content": "ping me when free",
+          "utc": "2024-01-07T03:56:41Z",
+          "local": "2024-01-07 04:56:41+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0054",
+          "ts_ms": 1704604015160,
+          "ord": {
+            "file": 8,
+            "index": 5
+          },
+          "sender": "Mira Okonkwo",
+          "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "utc": "2024-01-07T05:06:55Z",
+          "local": "2024-01-07 06:06:55+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0055",
+          "ts_ms": 1704607500926,
+          "ord": {
+            "file": 8,
+            "index": 4
+          },
+          "sender": "Kai Lindqvist",
+          "content": "\u0645\u0631\u062d\u0628\u0627, \u0643\u064a\u0641 \u062d\u0627\u0644\u0643\u061f",
+          "utc": "2024-01-07T06:05:00Z",
+          "local": "2024-01-07 07:05:00+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0056",
+          "ts_ms": 1704610730305,
+          "ord": {
+            "file": 8,
+            "index": 3
+          },
+          "sender": "Mira Okonkwo",
+          "content": "deploy window is 02:00",
+          "utc": "2024-01-07T06:58:50Z",
+          "local": "2024-01-07 07:58:50+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0057",
+          "ts_ms": 1704614264401,
+          "ord": {
+            "file": 8,
+            "index": 2
+          },
+          "sender": "Mira Okonkwo",
+          "content": "let's split the refactor",
+          "utc": "2024-01-07T07:57:44Z",
+          "local": "2024-01-07 08:57:44+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0058",
+          "ts_ms": 1704618224076,
+          "ord": {
+            "file": 8,
+            "index": 1
+          },
+          "sender": "Kai Lindqvist",
+          "content": "\u65e5\u672c\u8a9e\u3082Visa",
+          "utc": "2024-01-07T09:03:44Z",
+          "local": "2024-01-07 10:03:44+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0059",
+          "ts_ms": 1704621407963,
+          "ord": {
+            "file": 8,
+            "index": 0
+          },
+          "sender": "Mira Okonkwo",
+          "content": "ty!",
+          "utc": "2024-01-07T09:56:47Z",
+          "local": "2024-01-07 10:56:47+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0060",
+          "ts_ms": 1704625475618,
+          "ord": {
+            "file": 7,
+            "index": 12
+          },
+          "sender": "Mira Okonkwo",
+          "content": "ty!",
+          "utc": "2024-01-07T11:04:35Z",
+          "local": "2024-01-07 12:04:35+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0061",
+          "ts_ms": 1704629184004,
+          "ord": {
+            "file": 7,
+            "index": 11
+          },
+          "sender": "Kai Lindqvist",
+          "content": "let's split the refactor",
+          "utc": "2024-01-07T12:06:24Z",
+          "local": "2024-01-07 13:06:24+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0062",
+          "ts_ms": 1704632474595,
+          "ord": {
+            "file": 7,
+            "index": 10
+          },
+          "sender": "Mira Okonkwo",
+          "content": "ty!",
+          "utc": "2024-01-07T13:01:14Z",
+          "local": "2024-01-07 14:01:14+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0063",
+          "ts_ms": 1704635463410,
+          "ord": {
+            "file": 7,
+            "index": 9
+          },
+          "sender": "Mira Okonkwo",
+          "content": "lunch?",
+          "utc": "2024-01-07T13:51:03Z",
+          "local": "2024-01-07 14:51:03+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0064",
+          "ts_ms": 1704639402904,
+          "ord": {
+            "file": 7,
+            "index": 8
+          },
+          "sender": "Kai Lindqvist",
+          "content": "deploy window is 02:00",
+          "utc": "2024-01-07T14:56:42Z",
+          "local": "2024-01-07 15:56:42+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0065",
+          "ts_ms": 1704643243699,
+          "ord": {
+            "file": 7,
+            "index": 7
+          },
+          "sender": "Mira Okonkwo",
+          "content": "emoji test \ud83c\udf89",
+          "utc": "2024-01-07T16:00:43Z",
+          "local": "2024-01-07 17:00:43+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0066",
+          "ts_ms": 1704646860879,
+          "ord": {
+            "file": 7,
+            "index": 6
+          },
+          "sender": "Mira Okonkwo",
+          "content": "deploy window is 02:00",
+          "utc": "2024-01-07T17:01:00Z",
+          "local": "2024-01-07 18:01:00+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0067",
+          "ts_ms": 1704650552236,
+          "ord": {
+            "file": 7,
+            "index": 5
+          },
+          "sender": "Kai Lindqvist",
+          "content": "\u0645\u0631\u062d\u0628\u0627, \u0643\u064a\u0641 \u062d\u0627\u0644\u0643\u061f",
+          "utc": "2024-01-07T18:02:32Z",
+          "local": "2024-01-07 19:02:32+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0068",
+          "ts_ms": 1704654040214,
+          "ord": {
+            "file": 7,
+            "index": 4
+          },
+          "sender": "Mira Okonkwo",
+          "content": "bringing snacks",
+          "utc": "2024-01-07T19:00:40Z",
+          "local": "2024-01-07 20:00:40+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0069",
+          "ts_ms": 1704657794939,
+          "ord": {
+            "file": 7,
+            "index": 3
+          },
+          "sender": "Mira Okonkwo",
+          "content": "na\u00efve \u2014 dash",
+          "utc": "2024-01-07T20:03:14Z",
+          "local": "2024-01-07 21:03:14+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0070",
+          "ts_ms": 1704661178043,
+          "ord": {
+            "file": 7,
+            "index": 2
+          },
+          "sender": "Kai Lindqvist",
+          "content": "na\u00efve approach",
+          "utc": "2024-01-07T20:59:38Z",
+          "local": "2024-01-07 21:59:38+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0071",
+          "ts_ms": 1704665008288,
+          "ord": {
+            "file": 7,
+            "index": 1
+          },
+          "sender": "Mira Okonkwo",
+          "content": "bringing snacks",
+          "utc": "2024-01-07T22:03:28Z",
+          "local": "2024-01-07 23:03:28+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0072",
+          "ts_ms": 1704668766311,
+          "ord": {
+            "file": 7,
+            "index": 0
+          },
+          "sender": "Mira Okonkwo",
+          "content": "the build is green again",
+          "utc": "2024-01-07T23:06:06Z",
+          "local": "2024-01-08 00:06:06+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0073",
+          "ts_ms": 1704672118270,
+          "ord": {
+            "file": 5,
+            "index": 13
+          },
+          "sender": "Kai Lindqvist",
+          "content": "ship it",
+          "utc": "2024-01-08T00:01:58Z",
+          "local": "2024-01-08 01:01:58+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0074",
+          "ts_ms": 1704675577156,
+          "ord": {
+            "file": 5,
+            "index": 12
+          },
+          "sender": "Mira Okonkwo",
+          "content": "the build is green again",
+          "utc": "2024-01-08T00:59:37Z",
+          "local": "2024-01-08 01:59:37+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0075",
+          "ts_ms": 1704679705536,
+          "ord": {
+            "file": 5,
+            "index": 11
+          },
+          "sender": "Mira Okonkwo",
+          "content": "double  spaces  here",
+          "utc": "2024-01-08T02:08:25Z",
+          "local": "2024-01-08 03:08:25+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0076",
+          "ts_ms": 1704683015283,
+          "ord": {
+            "file": 5,
+            "index": 10
+          },
+          "sender": "Kai Lindqvist",
+          "content": "ty!",
+          "utc": "2024-01-08T03:03:35Z",
+          "local": "2024-01-08 04:03:35+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0077",
+          "ts_ms": 1704685877901,
+          "ord": {
+            "file": 5,
+            "index": 9
+          },
+          "sender": "Mira Okonkwo",
+          "content": "na\u00efve approach",
+          "utc": "2024-01-08T03:51:17Z",
+          "local": "2024-01-08 04:51:17+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0078",
+          "ts_ms": 1704690194369,
+          "ord": {
+            "file": 5,
+            "index": 8
+          },
+          "sender": "Mira Okonkwo",
+          "content": "I'll bring the docs",
+          "utc": "2024-01-08T05:03:14Z",
+          "local": "2024-01-08 06:03:14+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0079",
+          "ts_ms": 1704693931790,
+          "ord": {
+            "file": 5,
+            "index": 7
+          },
+          "sender": "Kai Lindqvist",
+          "content": "ping me when free",
+          "utc": "2024-01-08T06:05:31Z",
+          "local": "2024-01-08 07:05:31+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0080",
+          "ts_ms": 1704697109661,
+          "ord": {
+            "file": 4,
+            "index": 5
+          },
+          "sender": "Mira Okonkwo",
+          "content": "caf\u00e9 run at 5?",
+          "utc": "2024-01-08T06:58:29Z",
+          "local": "2024-01-08 07:58:29+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0081",
+          "ts_ms": 1704700309581,
+          "ord": {
+            "file": 4,
+            "index": 4
+          },
+          "sender": "Mira Okonkwo",
+          "content": "ok, sounds good",
+          "utc": "2024-01-08T07:51:49Z",
+          "local": "2024-01-08 08:51:49+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0082",
+          "ts_ms": 1704704245580,
+          "ord": {
+            "file": 4,
+            "index": 3
+          },
+          "sender": "Kai Lindqvist",
+          "content": "double  spaces  here",
+          "utc": "2024-01-08T08:57:25Z",
+          "local": "2024-01-08 09:57:25+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0083",
+          "ts_ms": 1704708521909,
+          "ord": {
+            "file": 4,
+            "index": 2
+          },
+          "sender": "Mira Okonkwo",
+          "content": "\u041f\u0440\u0438\u0432\u0435\u0442, \u043a\u0430\u043a \u0434\u0435\u043b\u0430?",
+          "utc": "2024-01-08T10:08:41Z",
+          "local": "2024-01-08 11:08:41+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0084",
+          "ts_ms": 1704711580421,
+          "ord": {
+            "file": 4,
+            "index": 1
+          },
+          "sender": "Mira Okonkwo",
+          "content": "\u65e5\u672c\u8a9e\u3082Visa",
+          "utc": "2024-01-08T10:59:40Z",
+          "local": "2024-01-08 11:59:40+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0085",
+          "ts_ms": 1704714815930,
+          "ord": {
+            "file": 4,
+            "index": 0
+          },
+          "sender": "Kai Lindqvist",
+          "content": "ack",
+          "utc": "2024-01-08T11:53:35Z",
+          "local": "2024-01-08 12:53:35+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0086",
+          "ts_ms": 1704719260785,
+          "ord": {
+            "file": 6,
+            "index": 13
+          },
+          "sender": "Mira Okonkwo",
+          "content": "caf\u00e9",
+          "utc": "2024-01-08T13:07:40Z",
+          "local": "2024-01-08 14:07:40+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0087",
+          "ts_ms": 1704722840745,
+          "ord": {
+            "file": 6,
+            "index": 12
+          },
+          "sender": "Mira Okonkwo",
+          "content": "deploy window is 02:00",
+          "utc": "2024-01-08T14:07:20Z",
+          "local": "2024-01-08 15:07:20+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0088",
+          "ts_ms": 1704725433227,
+          "ord": {
+            "file": 6,
+            "index": 11
+          },
+          "sender": "Kai Lindqvist",
+          "content": "ok, sounds good",
+          "utc": "2024-01-08T14:50:33Z",
+          "local": "2024-01-08 15:50:33+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0089",
+          "ts_ms": 1704729310657,
+          "ord": {
+            "file": 6,
+            "index": 10
+          },
+          "sender": "Mira Okonkwo",
+          "content": "na\u00efve approach",
+          "utc": "2024-01-08T15:55:10Z",
+          "local": "2024-01-08 16:55:10+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0090",
+          "ts_ms": 1704732768470,
+          "ord": {
+            "file": 6,
+            "index": 9
+          },
+          "sender": "Mira Okonkwo",
+          "content": "family emoji \ud83d\ude00\ud83c\udf82",
+          "utc": "2024-01-08T16:52:48Z",
+          "local": "2024-01-08 17:52:48+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0091",
+          "ts_ms": 1704737225336,
+          "ord": {
+            "file": 6,
+            "index": 8
+          },
+          "sender": "Kai Lindqvist",
+          "content": "ty!",
+          "utc": "2024-01-08T18:07:05Z",
+          "local": "2024-01-08 19:07:05+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0092",
+          "ts_ms": 1704739843738,
+          "ord": {
+            "file": 6,
+            "index": 7
+          },
+          "sender": "Mira Okonkwo",
+          "content": "family emoji \ud83d\ude00\ud83c\udf82",
+          "utc": "2024-01-08T18:50:43Z",
+          "local": "2024-01-08 19:50:43+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0093",
+          "ts_ms": 1704743804341,
+          "ord": {
+            "file": 6,
+            "index": 6
+          },
+          "sender": "Mira Okonkwo",
+          "content": "let's split the refactor",
+          "utc": "2024-01-08T19:56:44Z",
+          "local": "2024-01-08 20:56:44+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0094",
+          "ts_ms": 1704747497126,
+          "ord": {
+            "file": 6,
+            "index": 5
+          },
+          "sender": "Kai Lindqvist",
+          "content": "let's split the refactor",
+          "utc": "2024-01-08T20:58:17Z",
+          "local": "2024-01-08 21:58:17+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0095",
+          "ts_ms": 1704750688723,
+          "ord": {
+            "file": 6,
+            "index": 4
+          },
+          "sender": "Mira Okonkwo",
+          "content": "bringing snacks",
+          "utc": "2024-01-08T21:51:28Z",
+          "local": "2024-01-08 22:51:28+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0096",
+          "ts_ms": 1704755166700,
+          "ord": {
+            "file": 6,
+            "index": 3
+          },
+          "sender": "Mira Okonkwo",
+          "content": "family emoji \ud83d\ude00\ud83c\udf82",
+          "utc": "2024-01-08T23:06:06Z",
+          "local": "2024-01-09 00:06:06+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0097",
+          "ts_ms": 1704758443638,
+          "ord": {
+            "file": 6,
+            "index": 2
+          },
+          "sender": "Kai Lindqvist",
+          "content": "\u0645\u0631\u062d\u0628\u0627, \u0643\u064a\u0641 \u062d\u0627\u0644\u0643\u061f",
+          "utc": "2024-01-09T00:00:43Z",
+          "local": "2024-01-09 01:00:43+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0098",
+          "ts_ms": 1704761452549,
+          "ord": {
+            "file": 6,
+            "index": 1
+          },
+          "sender": "Mira Okonkwo",
+          "content": "\u65e5\u672c\u8a9e\u3082Visa",
+          "utc": "2024-01-09T00:50:52Z",
+          "local": "2024-01-09 01:50:52+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0099",
+          "ts_ms": 1704765740448,
+          "ord": {
+            "file": 4,
+            "index": 19
+          },
+          "sender": "Mira Okonkwo",
+          "content": "emoji test \ud83c\udf89",
+          "utc": "2024-01-09T02:02:20Z",
+          "local": "2024-01-09 03:02:20+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0100",
+          "ts_ms": 1704768956306,
+          "ord": {
+            "file": 4,
+            "index": 18
+          },
+          "sender": "Kai Lindqvist",
+          "content": "caf\u00e9 run at 5?",
+          "utc": "2024-01-09T02:55:56Z",
+          "local": "2024-01-09 03:55:56+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0101",
+          "ts_ms": 1704772232177,
+          "ord": {
+            "file": 4,
+            "index": 17
+          },
+          "sender": "Mira Okonkwo",
+          "content": "the build is green again",
+          "utc": "2024-01-09T03:50:32Z",
+          "local": "2024-01-09 04:50:32+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0102",
+          "ts_ms": 1704776206305,
+          "ord": {
+            "file": 4,
+            "index": 16
+          },
+          "sender": "Mira Okonkwo",
+          "content": "ok, sounds good",
+          "utc": "2024-01-09T04:56:46Z",
+          "local": "2024-01-09 05:56:46+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0103",
+          "ts_ms": 1704779812817,
+          "ord": {
+            "file": 4,
+            "index": 15
+          },
+          "sender": "Kai Lindqvist",
+          "content": "\u65e5\u672c\u8a9e\u306e\u30c6\u30ad\u30b9\u30c8",
+          "utc": "2024-01-09T05:56:52Z",
+          "local": "2024-01-09 06:56:52+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0104",
+          "ts_ms": 1704783334416,
+          "ord": {
+            "file": 4,
+            "index": 14
+          },
+          "sender": "Mira Okonkwo",
+          "content": "the build is green again",
+          "utc": "2024-01-09T06:55:34Z",
+          "local": "2024-01-09 07:55:34+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0105",
+          "ts_ms": 1704787448684,
+          "ord": {
+            "file": 4,
+            "index": 13
+          },
+          "sender": "Mira Okonkwo",
+          "content": "deploy window is 02:00",
+          "utc": "2024-01-09T08:04:08Z",
+          "local": "2024-01-09 09:04:08+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0106",
+          "ts_ms": 1704790714915,
+          "ord": {
+            "file": 4,
+            "index": 12
+          },
+          "sender": "Kai Lindqvist",
+          "content": "ack",
+          "utc": "2024-01-09T08:58:34Z",
+          "local": "2024-01-09 09:58:34+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0107",
+          "ts_ms": 1704794703093,
+          "ord": {
+            "file": 4,
+            "index": 11
+          },
+          "sender": "Mira Okonkwo",
+          "content": "lunch?",
+          "utc": "2024-01-09T10:05:03Z",
+          "local": "2024-01-09 11:05:03+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0108",
+          "ts_ms": 1704798271787,
+          "ord": {
+            "file": 4,
+            "index": 10
+          },
+          "sender": "Mira Okonkwo",
+          "content": "bringing snacks",
+          "utc": "2024-01-09T11:04:31Z",
+          "local": "2024-01-09 12:04:31+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0109",
+          "ts_ms": 1704802156786,
+          "ord": {
+            "file": 4,
+            "index": 9
+          },
+          "sender": "Kai Lindqvist",
+          "content": "\u65e5\u672c\u8a9e\u3082Visa",
+          "utc": "2024-01-09T12:09:16Z",
+          "local": "2024-01-09 13:09:16+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0110",
+          "ts_ms": 1704805592128,
+          "ord": {
+            "file": 4,
+            "index": 8
+          },
+          "sender": "Mira Okonkwo",
+          "content": "family emoji \ud83d\ude00\ud83c\udf82",
+          "utc": "2024-01-09T13:06:32Z",
+          "local": "2024-01-09 14:06:32+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0111",
+          "ts_ms": 1704808354928,
+          "ord": {
+            "file": 4,
+            "index": 7
+          },
+          "sender": "Mira Okonkwo",
+          "content": "ping me when free",
+          "utc": "2024-01-09T13:52:34Z",
+          "local": "2024-01-09 14:52:34+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0112",
+          "ts_ms": 1704811941838,
+          "ord": {
+            "file": 3,
+            "index": 12
+          },
+          "sender": "Kai Lindqvist",
+          "content": "the build is green again",
+          "utc": "2024-01-09T14:52:21Z",
+          "local": "2024-01-09 15:52:21+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0113",
+          "ts_ms": 1704816156871,
+          "ord": {
+            "file": 3,
+            "index": 11
+          },
+          "sender": "Mira Okonkwo",
+          "content": "na\u00efve approach",
+          "utc": "2024-01-09T16:02:36Z",
+          "local": "2024-01-09 17:02:36+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0114",
+          "ts_ms": 1704819794078,
+          "ord": {
+            "file": 3,
+            "index": 10
+          },
+          "sender": "Mira Okonkwo",
+          "content": "that bug was a typo",
+          "utc": "2024-01-09T17:03:14Z",
+          "local": "2024-01-09 18:03:14+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0115",
+          "ts_ms": 1704822600323,
+          "ord": {
+            "file": 3,
+            "index": 9
+          },
+          "sender": "Kai Lindqvist",
+          "content": "ship it",
+          "utc": "2024-01-09T17:50:00Z",
+          "local": "2024-01-09 18:50:00+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0116",
+          "ts_ms": 1704826324144,
+          "ord": {
+            "file": 3,
+            "index": 8
+          },
+          "sender": "Mira Okonkwo",
+          "content": "bringing snacks",
+          "utc": "2024-01-09T18:52:04Z",
+          "local": "2024-01-09 19:52:04+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0117",
+          "ts_ms": 1704830953873,
+          "ord": {
+            "file": 3,
+            "index": 7
+          },
+          "sender": "Mira Okonkwo",
+          "content": "deploy window is 02:00",
+          "utc": "2024-01-09T20:09:13Z",
+          "local": "2024-01-09 21:09:13+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0118",
+          "ts_ms": 1704834235192,
+          "ord": {
+            "file": 3,
+            "index": 6
+          },
+          "sender": "Kai Lindqvist",
+          "content": "caf\u00e9 run at 5?",
+          "utc": "2024-01-09T21:03:55Z",
+          "local": "2024-01-09 22:03:55+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0119",
+          "ts_ms": 1704838094836,
+          "ord": {
+            "file": 3,
+            "index": 5
+          },
+          "sender": "Mira Okonkwo",
+          "content": "that bug was a typo",
+          "utc": "2024-01-09T22:08:14Z",
+          "local": "2024-01-09 23:08:14+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0120",
+          "ts_ms": 1704841202015,
+          "ord": {
+            "file": 3,
+            "index": 4
+          },
+          "sender": "Mira Okonkwo",
+          "content": "\ud83d\ude00\ud83c\udf89",
+          "utc": "2024-01-09T23:00:02Z",
+          "local": "2024-01-10 00:00:02+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0121",
+          "ts_ms": 1704845068896,
+          "ord": {
+            "file": 3,
+            "index": 3
+          },
+          "sender": "Kai Lindqvist",
+          "content": "ship it",
+          "utc": "2024-01-10T00:04:28Z",
+          "local": "2024-01-10 01:04:28+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0122",
+          "ts_ms": 1704848819655,
+          "ord": {
+            "file": 3,
+            "index": 2
+          },
+          "sender": "Mira Okonkwo",
+          "content": "ok, sounds good",
+          "utc": "2024-01-10T01:06:59Z",
+          "local": "2024-01-10 02:06:59+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0123",
+          "ts_ms": 1704851481102,
+          "ord": {
+            "file": 3,
+            "index": 1
+          },
+          "sender": "Mira Okonkwo",
+          "content": "\u041f\u0440\u0438\u0432\u0435\u0442, \u043a\u0430\u043a \u0434\u0435\u043b\u0430?",
+          "utc": "2024-01-10T01:51:21Z",
+          "local": "2024-01-10 02:51:21+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0124",
+          "ts_ms": 1704855027033,
+          "ord": {
+            "file": 3,
+            "index": 0
+          },
+          "sender": "Kai Lindqvist",
+          "content": "\u65e5\u672c\u8a9e\u3082Visa",
+          "utc": "2024-01-10T02:50:27Z",
+          "local": "2024-01-10 03:50:27+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0125",
+          "ts_ms": 1704858718641,
+          "ord": {
+            "file": 2,
+            "index": 14
+          },
+          "sender": "Mira Okonkwo",
+          "content": "ty!",
+          "utc": "2024-01-10T03:51:58Z",
+          "local": "2024-01-10 04:51:58+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0126",
+          "ts_ms": 1704862312404,
+          "ord": {
+            "file": 2,
+            "index": 13
+          },
+          "sender": "Mira Okonkwo",
+          "content": "the build is green again",
+          "utc": "2024-01-10T04:51:52Z",
+          "local": "2024-01-10 05:51:52+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0127",
+          "ts_ms": 1704866714452,
+          "ord": {
+            "file": 2,
+            "index": 12
+          },
+          "sender": "Kai Lindqvist",
+          "content": "\u041f\u0440\u0438\u0432\u0435\u0442, \u043a\u0430\u043a \u0434\u0435\u043b\u0430?",
+          "utc": "2024-01-10T06:05:14Z",
+          "local": "2024-01-10 07:05:14+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0128",
+          "ts_ms": 1704870284415,
+          "ord": {
+            "file": 2,
+            "index": 11
+          },
+          "sender": "Mira Okonkwo",
+          "content": "ty!",
+          "utc": "2024-01-10T07:04:44Z",
+          "local": "2024-01-10 08:04:44+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0129",
+          "ts_ms": 1704873992260,
+          "ord": {
+            "file": 2,
+            "index": 10
+          },
+          "sender": "Mira Okonkwo",
+          "content": "\u0645\u0631\u062d\u0628\u0627, \u0643\u064a\u0641 \u062d\u0627\u0644\u0643\u061f",
+          "utc": "2024-01-10T08:06:32Z",
+          "local": "2024-01-10 09:06:32+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0130",
+          "ts_ms": 1704876625202,
+          "ord": {
+            "file": 2,
+            "index": 9
+          },
+          "sender": "Kai Lindqvist",
+          "content": "let's split the refactor",
+          "utc": "2024-01-10T08:50:25Z",
+          "local": "2024-01-10 09:50:25+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0131",
+          "ts_ms": 1704880585366,
+          "ord": {
+            "file": 2,
+            "index": 8
+          },
+          "sender": "Mira Okonkwo",
+          "content": "double  spaces  here",
+          "utc": "2024-01-10T09:56:25Z",
+          "local": "2024-01-10 10:56:25+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0132",
+          "ts_ms": 1704883954097,
+          "ord": {
+            "file": 2,
+            "index": 7
+          },
+          "sender": "Mira Okonkwo",
+          "content": "ping me when free",
+          "utc": "2024-01-10T10:52:34Z",
+          "local": "2024-01-10 11:52:34+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0133",
+          "ts_ms": 1704887796520,
+          "ord": {
+            "file": 2,
+            "index": 6
+          },
+          "sender": "Kai Lindqvist",
+          "content": "emoji test \ud83c\udf89",
+          "utc": "2024-01-10T11:56:36Z",
+          "local": "2024-01-10 12:56:36+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0134",
+          "ts_ms": 1704892154852,
+          "ord": {
+            "file": 2,
+            "index": 5
+          },
+          "sender": "Mira Okonkwo",
+          "content": "the build is green again",
+          "utc": "2024-01-10T13:09:14Z",
+          "local": "2024-01-10 14:09:14+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0135",
+          "ts_ms": 1704894931279,
+          "ord": {
+            "file": 2,
+            "index": 4
+          },
+          "sender": "Mira Okonkwo",
+          "content": "I'll bring the docs",
+          "utc": "2024-01-10T13:55:31Z",
+          "local": "2024-01-10 14:55:31+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0136",
+          "ts_ms": 1704898665708,
+          "ord": {
+            "file": 2,
+            "index": 3
+          },
+          "sender": "Kai Lindqvist",
+          "content": "emoji test \ud83c\udf89",
+          "utc": "2024-01-10T14:57:45Z",
+          "local": "2024-01-10 15:57:45+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0137",
+          "ts_ms": 1704901968675,
+          "ord": {
+            "file": 2,
+            "index": 2
+          },
+          "sender": "Mira Okonkwo",
+          "content": "\u041f\u0440\u0438\u0432\u0435\u0442 \u043c\u0438\u0440",
+          "utc": "2024-01-10T15:52:48Z",
+          "local": "2024-01-10 16:52:48+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0138",
+          "ts_ms": 1704905790176,
+          "ord": {
+            "file": 1,
+            "index": 16
+          },
+          "sender": "Mira Okonkwo",
+          "content": "I'll bring the docs",
+          "utc": "2024-01-10T16:56:30Z",
+          "local": "2024-01-10 17:56:30+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0139",
+          "ts_ms": 1704909042721,
+          "ord": {
+            "file": 1,
+            "index": 15
+          },
+          "sender": "Kai Lindqvist",
+          "content": "emoji test \ud83c\udf89",
+          "utc": "2024-01-10T17:50:42Z",
+          "local": "2024-01-10 18:50:42+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0140",
+          "ts_ms": 1704913696669,
+          "ord": {
+            "file": 1,
+            "index": 14
+          },
+          "sender": "Mira Okonkwo",
+          "content": "emoji test \ud83c\udf89",
+          "utc": "2024-01-10T19:08:16Z",
+          "local": "2024-01-10 20:08:16+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0141",
+          "ts_ms": 1704916840591,
+          "ord": {
+            "file": 1,
+            "index": 13
+          },
+          "sender": "Mira Okonkwo",
+          "content": "deploy window is 02:00",
+          "utc": "2024-01-10T20:00:40Z",
+          "local": "2024-01-10 21:00:40+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0155",
+          "ts_ms": 1706741999000,
+          "ord": {
+            "file": 1,
+            "index": 8
+          },
+          "sender": "Mira Okonkwo",
+          "content": "month boundary last second of january",
+          "utc": "2024-01-31T22:59:59Z",
+          "local": "2024-01-31 23:59:59+0100",
+          "month": "2024-01"
+        },
+        {
+          "id": "m0156",
+          "ts_ms": 1706742001000,
+          "ord": {
+            "file": 1,
+            "index": 7
+          },
+          "sender": "Kai Lindqvist",
+          "content": "month boundary first second of february",
+          "utc": "2024-01-31T23:00:01Z",
+          "local": "2024-02-01 00:00:01+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0157",
+          "ts_ms": 1709204400000,
+          "ord": {
+            "file": 1,
+            "index": 6
+          },
+          "sender": "Mira Okonkwo",
+          "content": "leap day 2024-02-29",
+          "utc": "2024-02-29T11:00:00Z",
+          "local": "2024-02-29 12:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0151",
+          "ts_ms": 1711845000000,
+          "ord": {
+            "file": 1,
+            "index": 12
+          },
+          "sender": "Mira Okonkwo",
+          "content": "dst spring 01:30 CET before the gap",
+          "utc": "2024-03-31T00:30:00Z",
+          "local": "2024-03-31 01:30:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0152",
+          "ts_ms": 1711848600000,
+          "ord": {
+            "file": 1,
+            "index": 11
+          },
+          "sender": "Kai Lindqvist",
+          "content": "dst spring 03:30 CEST after the gap",
+          "utc": "2024-03-31T01:30:00Z",
+          "local": "2024-03-31 03:30:00+0200",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0153",
+          "ts_ms": 1729989000000,
+          "ord": {
+            "file": 1,
+            "index": 10
+          },
+          "sender": "Mira Okonkwo",
+          "content": "dst fall first 02:30 +0200",
+          "utc": "2024-10-27T00:30:00Z",
+          "local": "2024-10-27 02:30:00+0200",
+          "month": "2024-10"
+        },
+        {
+          "id": "m0154",
+          "ts_ms": 1729992600000,
+          "ord": {
+            "file": 1,
+            "index": 9
+          },
+          "sender": "Kai Lindqvist",
+          "content": "dst fall second 02:30 +0100",
+          "utc": "2024-10-27T01:30:00Z",
+          "local": "2024-10-27 02:30:00+0100",
+          "month": "2024-10"
+        },
+        {
+          "id": "m0158",
+          "ts_ms": 1735685999000,
+          "ord": {
+            "file": 1,
+            "index": 5
+          },
+          "sender": "Kai Lindqvist",
+          "content": "year boundary last second of 2024",
+          "utc": "2024-12-31T22:59:59Z",
+          "local": "2024-12-31 23:59:59+0100",
+          "month": "2024-12"
+        },
+        {
+          "id": "m0159",
+          "ts_ms": 1735686001000,
+          "ord": {
+            "file": 1,
+            "index": 4
+          },
+          "sender": "Mira Okonkwo",
+          "content": "new year first second of 2025",
+          "utc": "2024-12-31T23:00:01Z",
+          "local": "2025-01-01 00:00:01+0100",
+          "month": "2025-01"
+        }
+      ],
+      "tie_pairs": [
+        {
+          "ts_ms": 1704423612345,
+          "files": [
+            1
+          ],
+          "expected_display_ids": [
+            "m0142",
+            "m0143",
+            "m0144",
+            "m0145"
+          ]
+        },
+        {
+          "ts_ms": 1704430800999,
+          "files": [
+            2
+          ],
+          "expected_display_ids": [
+            "m0146",
+            "m0147"
+          ]
+        }
+      ]
+    },
+    {
+      "assertions": {
+        "dropped": [],
+        "within_file_dupes_kept": [],
+        "missing_media": [],
+        "traversal_rejected": [],
+        "bare_filename_media": [],
+        "hostile_media": [],
+        "calendar_fixtures": []
+      },
+      "key": "dev_team_7730",
+      "title": "Dev Team",
+      "participants": [
+        "Kai Lindqvist",
+        "Ana O'Brien-\u015awi\u0105tek (she/her)",
+        "bot/worker",
+        "Dev Team",
+        "Ravi Menon"
+      ],
+      "file_count": 4,
+      "raw_count": 60,
+      "message_count": 60,
+      "months": [
+        {
+          "key": "2024-02",
+          "count": 60,
+          "first_ts_ms": 1707868800000,
+          "last_ts_ms": 1708506000000
+        }
+      ],
+      "order": [
+        {
+          "id": "m0160",
+          "ts_ms": 1707868800000,
+          "ord": {
+            "file": 4,
+            "index": 14
+          },
+          "sender": "Kai Lindqvist",
+          "content": "caf\u00e9 run at 5?",
+          "utc": "2024-02-14T00:00:00Z",
+          "local": "2024-02-14 01:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0161",
+          "ts_ms": 1707879600000,
+          "ord": {
+            "file": 4,
+            "index": 13
+          },
+          "sender": "Ana O'Brien-\u015awi\u0105tek (she/her)",
+          "content": "\u65e5\u672c\u8a9e\u3082Visa",
+          "utc": "2024-02-14T03:00:00Z",
+          "local": "2024-02-14 04:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0162",
+          "ts_ms": 1707890400000,
+          "ord": {
+            "file": 4,
+            "index": 12
+          },
+          "sender": "bot/worker",
+          "content": "ok, sounds good",
+          "utc": "2024-02-14T06:00:00Z",
+          "local": "2024-02-14 07:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0163",
+          "ts_ms": 1707901200000,
+          "ord": {
+            "file": 4,
+            "index": 11
+          },
+          "sender": "Dev Team",
+          "content": "lunch?",
+          "utc": "2024-02-14T09:00:00Z",
+          "local": "2024-02-14 10:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0164",
+          "ts_ms": 1707912000000,
+          "ord": {
+            "file": 4,
+            "index": 10
+          },
+          "sender": "Ravi Menon",
+          "content": "double  spaces  here",
+          "utc": "2024-02-14T12:00:00Z",
+          "local": "2024-02-14 13:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0165",
+          "ts_ms": 1707922800000,
+          "ord": {
+            "file": 4,
+            "index": 9
+          },
+          "sender": "Kai Lindqvist",
+          "content": "\u041f\u0440\u0438\u0432\u0435\u0442, \u043a\u0430\u043a \u0434\u0435\u043b\u0430?",
+          "utc": "2024-02-14T15:00:00Z",
+          "local": "2024-02-14 16:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0166",
+          "ts_ms": 1707933600000,
+          "ord": {
+            "file": 4,
+            "index": 8
+          },
+          "sender": "Ana O'Brien-\u015awi\u0105tek (she/her)",
+          "content": "\u65e5\u672c\u8a9e\u3082Visa",
+          "utc": "2024-02-14T18:00:00Z",
+          "local": "2024-02-14 19:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0167",
+          "ts_ms": 1707944400000,
+          "ord": {
+            "file": 4,
+            "index": 7
+          },
+          "sender": "bot/worker",
+          "content": "ship it",
+          "utc": "2024-02-14T21:00:00Z",
+          "local": "2024-02-14 22:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0168",
+          "ts_ms": 1707955200000,
+          "ord": {
+            "file": 4,
+            "index": 6
+          },
+          "sender": "Dev Team",
+          "content": "\u041f\u0440\u0438\u0432\u0435\u0442, \u043a\u0430\u043a \u0434\u0435\u043b\u0430?",
+          "utc": "2024-02-15T00:00:00Z",
+          "local": "2024-02-15 01:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0169",
+          "ts_ms": 1707966000000,
+          "ord": {
+            "file": 4,
+            "index": 5
+          },
+          "sender": "Ravi Menon",
+          "content": "ack",
+          "utc": "2024-02-15T03:00:00Z",
+          "local": "2024-02-15 04:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0170",
+          "ts_ms": 1707976800000,
+          "ord": {
+            "file": 4,
+            "index": 4
+          },
+          "sender": "Kai Lindqvist",
+          "content": "ack",
+          "utc": "2024-02-15T06:00:00Z",
+          "local": "2024-02-15 07:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0171",
+          "ts_ms": 1707987600000,
+          "ord": {
+            "file": 4,
+            "index": 3
+          },
+          "sender": "Ana O'Brien-\u015awi\u0105tek (she/her)",
+          "content": "\u65e5\u672c\u8a9e\u3082Visa",
+          "utc": "2024-02-15T09:00:00Z",
+          "local": "2024-02-15 10:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0172",
+          "ts_ms": 1707998400000,
+          "ord": {
+            "file": 4,
+            "index": 2
+          },
+          "sender": "bot/worker",
+          "content": "ping me when free",
+          "utc": "2024-02-15T12:00:00Z",
+          "local": "2024-02-15 13:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0173",
+          "ts_ms": 1708009200000,
+          "ord": {
+            "file": 4,
+            "index": 1
+          },
+          "sender": "Dev Team",
+          "content": "caf\u00e9 run at 5?",
+          "utc": "2024-02-15T15:00:00Z",
+          "local": "2024-02-15 16:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0174",
+          "ts_ms": 1708020000000,
+          "ord": {
+            "file": 4,
+            "index": 0
+          },
+          "sender": "Ravi Menon",
+          "content": "deploy window is 02:00",
+          "utc": "2024-02-15T18:00:00Z",
+          "local": "2024-02-15 19:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0175",
+          "ts_ms": 1708030800000,
+          "ord": {
+            "file": 3,
+            "index": 14
+          },
+          "sender": "Kai Lindqvist",
+          "content": "ship it",
+          "utc": "2024-02-15T21:00:00Z",
+          "local": "2024-02-15 22:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0176",
+          "ts_ms": 1708041600000,
+          "ord": {
+            "file": 3,
+            "index": 13
+          },
+          "sender": "Ana O'Brien-\u015awi\u0105tek (she/her)",
+          "content": "lunch?",
+          "utc": "2024-02-16T00:00:00Z",
+          "local": "2024-02-16 01:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0177",
+          "ts_ms": 1708052400000,
+          "ord": {
+            "file": 3,
+            "index": 12
+          },
+          "sender": "bot/worker",
+          "content": "\u0645\u0631\u062d\u0628\u0627, \u0643\u064a\u0641 \u062d\u0627\u0644\u0643\u061f",
+          "utc": "2024-02-16T03:00:00Z",
+          "local": "2024-02-16 04:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0178",
+          "ts_ms": 1708063200000,
+          "ord": {
+            "file": 3,
+            "index": 11
+          },
+          "sender": "Dev Team",
+          "content": "I'll bring the docs",
+          "utc": "2024-02-16T06:00:00Z",
+          "local": "2024-02-16 07:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0179",
+          "ts_ms": 1708074000000,
+          "ord": {
+            "file": 3,
+            "index": 10
+          },
+          "sender": "Ravi Menon",
+          "content": "\u0645\u0631\u062d\u0628\u0627, \u0643\u064a\u0641 \u062d\u0627\u0644\u0643\u061f",
+          "utc": "2024-02-16T09:00:00Z",
+          "local": "2024-02-16 10:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0180",
+          "ts_ms": 1708084800000,
+          "ord": {
+            "file": 3,
+            "index": 9
+          },
+          "sender": "Kai Lindqvist",
+          "content": "lunch?",
+          "utc": "2024-02-16T12:00:00Z",
+          "local": "2024-02-16 13:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0181",
+          "ts_ms": 1708095600000,
+          "ord": {
+            "file": 3,
+            "index": 8
+          },
+          "sender": "Ana O'Brien-\u015awi\u0105tek (she/her)",
+          "content": "\u0645\u0631\u062d\u0628\u0627, \u0643\u064a\u0641 \u062d\u0627\u0644\u0643\u061f",
+          "utc": "2024-02-16T15:00:00Z",
+          "local": "2024-02-16 16:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0182",
+          "ts_ms": 1708106400000,
+          "ord": {
+            "file": 3,
+            "index": 7
+          },
+          "sender": "bot/worker",
+          "content": "ship it",
+          "utc": "2024-02-16T18:00:00Z",
+          "local": "2024-02-16 19:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0183",
+          "ts_ms": 1708117200000,
+          "ord": {
+            "file": 3,
+            "index": 6
+          },
+          "sender": "Dev Team",
+          "content": "lunch?",
+          "utc": "2024-02-16T21:00:00Z",
+          "local": "2024-02-16 22:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0184",
+          "ts_ms": 1708128000000,
+          "ord": {
+            "file": 3,
+            "index": 5
+          },
+          "sender": "Ravi Menon",
+          "content": "ty!",
+          "utc": "2024-02-17T00:00:00Z",
+          "local": "2024-02-17 01:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0185",
+          "ts_ms": 1708138800000,
+          "ord": {
+            "file": 3,
+            "index": 4
+          },
+          "sender": "Kai Lindqvist",
+          "content": "emoji test \ud83c\udf89",
+          "utc": "2024-02-17T03:00:00Z",
+          "local": "2024-02-17 04:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0186",
+          "ts_ms": 1708149600000,
+          "ord": {
+            "file": 3,
+            "index": 3
+          },
+          "sender": "Ana O'Brien-\u015awi\u0105tek (she/her)",
+          "content": "family emoji \ud83d\ude00\ud83c\udf82",
+          "utc": "2024-02-17T06:00:00Z",
+          "local": "2024-02-17 07:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0187",
+          "ts_ms": 1708160400000,
+          "ord": {
+            "file": 3,
+            "index": 2
+          },
+          "sender": "bot/worker",
+          "content": "the build is green again",
+          "utc": "2024-02-17T09:00:00Z",
+          "local": "2024-02-17 10:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0188",
+          "ts_ms": 1708171200000,
+          "ord": {
+            "file": 3,
+            "index": 1
+          },
+          "sender": "Dev Team",
+          "content": "\u65e5\u672c\u8a9e\u3082Visa",
+          "utc": "2024-02-17T12:00:00Z",
+          "local": "2024-02-17 13:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0189",
+          "ts_ms": 1708182000000,
+          "ord": {
+            "file": 3,
+            "index": 0
+          },
+          "sender": "Ravi Menon",
+          "content": "ty!",
+          "utc": "2024-02-17T15:00:00Z",
+          "local": "2024-02-17 16:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0190",
+          "ts_ms": 1708192800000,
+          "ord": {
+            "file": 2,
+            "index": 14
+          },
+          "sender": "Kai Lindqvist",
+          "content": "I'll bring the docs",
+          "utc": "2024-02-17T18:00:00Z",
+          "local": "2024-02-17 19:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0191",
+          "ts_ms": 1708203600000,
+          "ord": {
+            "file": 2,
+            "index": 13
+          },
+          "sender": "Ana O'Brien-\u015awi\u0105tek (she/her)",
+          "content": "ty!",
+          "utc": "2024-02-17T21:00:00Z",
+          "local": "2024-02-17 22:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0192",
+          "ts_ms": 1708214400000,
+          "ord": {
+            "file": 2,
+            "index": 12
+          },
+          "sender": "bot/worker",
+          "content": "family emoji \ud83d\ude00\ud83c\udf82",
+          "utc": "2024-02-18T00:00:00Z",
+          "local": "2024-02-18 01:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0193",
+          "ts_ms": 1708225200000,
+          "ord": {
+            "file": 2,
+            "index": 11
+          },
+          "sender": "Dev Team",
+          "content": "deploy window is 02:00",
+          "utc": "2024-02-18T03:00:00Z",
+          "local": "2024-02-18 04:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0194",
+          "ts_ms": 1708236000000,
+          "ord": {
+            "file": 2,
+            "index": 10
+          },
+          "sender": "Ravi Menon",
+          "content": "I'll bring the docs",
+          "utc": "2024-02-18T06:00:00Z",
+          "local": "2024-02-18 07:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0195",
+          "ts_ms": 1708246800000,
+          "ord": {
+            "file": 2,
+            "index": 9
+          },
+          "sender": "Kai Lindqvist",
+          "content": "ping me when free",
+          "utc": "2024-02-18T09:00:00Z",
+          "local": "2024-02-18 10:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0196",
+          "ts_ms": 1708257600000,
+          "ord": {
+            "file": 2,
+            "index": 8
+          },
+          "sender": "Ana O'Brien-\u015awi\u0105tek (she/her)",
+          "content": "the build is green again",
+          "utc": "2024-02-18T12:00:00Z",
+          "local": "2024-02-18 13:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0197",
+          "ts_ms": 1708268400000,
+          "ord": {
+            "file": 2,
+            "index": 7
+          },
+          "sender": "bot/worker",
+          "content": "family emoji \ud83d\ude00\ud83c\udf82",
+          "utc": "2024-02-18T15:00:00Z",
+          "local": "2024-02-18 16:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0198",
+          "ts_ms": 1708279200000,
+          "ord": {
+            "file": 2,
+            "index": 6
+          },
+          "sender": "Dev Team",
+          "content": "ack",
+          "utc": "2024-02-18T18:00:00Z",
+          "local": "2024-02-18 19:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0199",
+          "ts_ms": 1708290000000,
+          "ord": {
+            "file": 2,
+            "index": 5
+          },
+          "sender": "Ravi Menon",
+          "content": "\u041f\u0440\u0438\u0432\u0435\u0442, \u043a\u0430\u043a \u0434\u0435\u043b\u0430?",
+          "utc": "2024-02-18T21:00:00Z",
+          "local": "2024-02-18 22:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0200",
+          "ts_ms": 1708300800000,
+          "ord": {
+            "file": 2,
+            "index": 4
+          },
+          "sender": "Kai Lindqvist",
+          "content": "\u041f\u0440\u0438\u0432\u0435\u0442, \u043a\u0430\u043a \u0434\u0435\u043b\u0430?",
+          "utc": "2024-02-19T00:00:00Z",
+          "local": "2024-02-19 01:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0201",
+          "ts_ms": 1708311600000,
+          "ord": {
+            "file": 2,
+            "index": 3
+          },
+          "sender": "Ana O'Brien-\u015awi\u0105tek (she/her)",
+          "content": "lunch?",
+          "utc": "2024-02-19T03:00:00Z",
+          "local": "2024-02-19 04:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0202",
+          "ts_ms": 1708322400000,
+          "ord": {
+            "file": 2,
+            "index": 2
+          },
+          "sender": "bot/worker",
+          "content": "na\u00efve approach",
+          "utc": "2024-02-19T06:00:00Z",
+          "local": "2024-02-19 07:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0203",
+          "ts_ms": 1708333200000,
+          "ord": {
+            "file": 2,
+            "index": 1
+          },
+          "sender": "Dev Team",
+          "content": "na\u00efve approach",
+          "utc": "2024-02-19T09:00:00Z",
+          "local": "2024-02-19 10:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0204",
+          "ts_ms": 1708344000000,
+          "ord": {
+            "file": 2,
+            "index": 0
+          },
+          "sender": "Ravi Menon",
+          "content": "caf\u00e9 run at 5?",
+          "utc": "2024-02-19T12:00:00Z",
+          "local": "2024-02-19 13:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0205",
+          "ts_ms": 1708354800000,
+          "ord": {
+            "file": 1,
+            "index": 14
+          },
+          "sender": "Kai Lindqvist",
+          "content": "bringing snacks",
+          "utc": "2024-02-19T15:00:00Z",
+          "local": "2024-02-19 16:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0206",
+          "ts_ms": 1708365600000,
+          "ord": {
+            "file": 1,
+            "index": 13
+          },
+          "sender": "Ana O'Brien-\u015awi\u0105tek (she/her)",
+          "content": "ty!",
+          "utc": "2024-02-19T18:00:00Z",
+          "local": "2024-02-19 19:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0207",
+          "ts_ms": 1708376400000,
+          "ord": {
+            "file": 1,
+            "index": 12
+          },
+          "sender": "bot/worker",
+          "content": "emoji test \ud83c\udf89",
+          "utc": "2024-02-19T21:00:00Z",
+          "local": "2024-02-19 22:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0208",
+          "ts_ms": 1708387200000,
+          "ord": {
+            "file": 1,
+            "index": 11
+          },
+          "sender": "Dev Team",
+          "content": "let's split the refactor",
+          "utc": "2024-02-20T00:00:00Z",
+          "local": "2024-02-20 01:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0209",
+          "ts_ms": 1708398000000,
+          "ord": {
+            "file": 1,
+            "index": 10
+          },
+          "sender": "Ravi Menon",
+          "content": "na\u00efve approach",
+          "utc": "2024-02-20T03:00:00Z",
+          "local": "2024-02-20 04:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0210",
+          "ts_ms": 1708408800000,
+          "ord": {
+            "file": 1,
+            "index": 9
+          },
+          "sender": "Kai Lindqvist",
+          "content": "ping me when free",
+          "utc": "2024-02-20T06:00:00Z",
+          "local": "2024-02-20 07:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0211",
+          "ts_ms": 1708419600000,
+          "ord": {
+            "file": 1,
+            "index": 8
+          },
+          "sender": "Ana O'Brien-\u015awi\u0105tek (she/her)",
+          "content": "that bug was a typo",
+          "utc": "2024-02-20T09:00:00Z",
+          "local": "2024-02-20 10:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0212",
+          "ts_ms": 1708430400000,
+          "ord": {
+            "file": 1,
+            "index": 7
+          },
+          "sender": "bot/worker",
+          "content": "\u0645\u0631\u062d\u0628\u0627, \u0643\u064a\u0641 \u062d\u0627\u0644\u0643\u061f",
+          "utc": "2024-02-20T12:00:00Z",
+          "local": "2024-02-20 13:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0213",
+          "ts_ms": 1708441200000,
+          "ord": {
+            "file": 1,
+            "index": 6
+          },
+          "sender": "Dev Team",
+          "content": "double  spaces  here",
+          "utc": "2024-02-20T15:00:00Z",
+          "local": "2024-02-20 16:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0214",
+          "ts_ms": 1708452000000,
+          "ord": {
+            "file": 1,
+            "index": 5
+          },
+          "sender": "Ravi Menon",
+          "content": "\u65e5\u672c\u8a9e\u3082Visa",
+          "utc": "2024-02-20T18:00:00Z",
+          "local": "2024-02-20 19:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0215",
+          "ts_ms": 1708462800000,
+          "ord": {
+            "file": 1,
+            "index": 4
+          },
+          "sender": "Kai Lindqvist",
+          "content": "the build is green again",
+          "utc": "2024-02-20T21:00:00Z",
+          "local": "2024-02-20 22:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0216",
+          "ts_ms": 1708473600000,
+          "ord": {
+            "file": 1,
+            "index": 3
+          },
+          "sender": "Ana O'Brien-\u015awi\u0105tek (she/her)",
+          "content": "\u041f\u0440\u0438\u0432\u0435\u0442, \u043a\u0430\u043a \u0434\u0435\u043b\u0430?",
+          "utc": "2024-02-21T00:00:00Z",
+          "local": "2024-02-21 01:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0217",
+          "ts_ms": 1708484400000,
+          "ord": {
+            "file": 1,
+            "index": 2
+          },
+          "sender": "bot/worker",
+          "content": "ty!",
+          "utc": "2024-02-21T03:00:00Z",
+          "local": "2024-02-21 04:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0218",
+          "ts_ms": 1708495200000,
+          "ord": {
+            "file": 1,
+            "index": 1
+          },
+          "sender": "Dev Team",
+          "content": "ping me when free",
+          "utc": "2024-02-21T06:00:00Z",
+          "local": "2024-02-21 07:00:00+0100",
+          "month": "2024-02"
+        },
+        {
+          "id": "m0219",
+          "ts_ms": 1708506000000,
+          "ord": {
+            "file": 1,
+            "index": 0
+          },
+          "sender": "Ravi Menon",
+          "content": "let's split the refactor",
+          "utc": "2024-02-21T09:00:00Z",
+          "local": "2024-02-21 10:00:00+0100",
+          "month": "2024-02"
+        }
+      ],
+      "tie_pairs": []
+    },
+    {
+      "assertions": {
+        "dropped": [],
+        "within_file_dupes_kept": [],
+        "missing_media": [],
+        "traversal_rejected": [],
+        "bare_filename_media": [],
+        "hostile_media": [],
+        "calendar_fixtures": []
+      },
+      "key": "sam_lee_9012",
+      "title": "Sam Lee",
+      "participants": [
+        "Sam Lee",
+        "Kai Lindqvist"
+      ],
+      "file_count": 2,
+      "raw_count": 25,
+      "message_count": 25,
+      "months": [
+        {
+          "key": "2024-03",
+          "count": 25,
+          "first_ts_ms": 1711324800000,
+          "last_ts_ms": 1711756800000
+        }
+      ],
+      "order": [
+        {
+          "id": "m0220",
+          "ts_ms": 1711324800000,
+          "ord": {
+            "file": 2,
+            "index": 11
+          },
+          "sender": "Kai Lindqvist",
+          "content": "ty!",
+          "utc": "2024-03-25T00:00:00Z",
+          "local": "2024-03-25 01:00:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0221",
+          "ts_ms": 1711342800000,
+          "ord": {
+            "file": 2,
+            "index": 10
+          },
+          "sender": "Sam Lee",
+          "content": "double  spaces  here",
+          "utc": "2024-03-25T05:00:00Z",
+          "local": "2024-03-25 06:00:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0222",
+          "ts_ms": 1711360800000,
+          "ord": {
+            "file": 2,
+            "index": 9
+          },
+          "sender": "Kai Lindqvist",
+          "content": "that bug was a typo",
+          "utc": "2024-03-25T10:00:00Z",
+          "local": "2024-03-25 11:00:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0223",
+          "ts_ms": 1711378800000,
+          "ord": {
+            "file": 2,
+            "index": 8
+          },
+          "sender": "Sam Lee",
+          "content": "deploy window is 02:00",
+          "utc": "2024-03-25T15:00:00Z",
+          "local": "2024-03-25 16:00:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0224",
+          "ts_ms": 1711396800000,
+          "ord": {
+            "file": 2,
+            "index": 7
+          },
+          "sender": "Kai Lindqvist",
+          "content": "the build is green again",
+          "utc": "2024-03-25T20:00:00Z",
+          "local": "2024-03-25 21:00:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0225",
+          "ts_ms": 1711414800000,
+          "ord": {
+            "file": 2,
+            "index": 6
+          },
+          "sender": "Sam Lee",
+          "content": "that bug was a typo",
+          "utc": "2024-03-26T01:00:00Z",
+          "local": "2024-03-26 02:00:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0226",
+          "ts_ms": 1711432800000,
+          "ord": {
+            "file": 2,
+            "index": 5
+          },
+          "sender": "Kai Lindqvist",
+          "content": "double  spaces  here",
+          "utc": "2024-03-26T06:00:00Z",
+          "local": "2024-03-26 07:00:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0227",
+          "ts_ms": 1711450800000,
+          "ord": {
+            "file": 2,
+            "index": 4
+          },
+          "sender": "Sam Lee",
+          "content": "that bug was a typo",
+          "utc": "2024-03-26T11:00:00Z",
+          "local": "2024-03-26 12:00:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0228",
+          "ts_ms": 1711468800000,
+          "ord": {
+            "file": 2,
+            "index": 3
+          },
+          "sender": "Kai Lindqvist",
+          "content": "na\u00efve approach",
+          "utc": "2024-03-26T16:00:00Z",
+          "local": "2024-03-26 17:00:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0229",
+          "ts_ms": 1711486800000,
+          "ord": {
+            "file": 2,
+            "index": 2
+          },
+          "sender": "Sam Lee",
+          "content": "caf\u00e9 run at 5?",
+          "utc": "2024-03-26T21:00:00Z",
+          "local": "2024-03-26 22:00:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0230",
+          "ts_ms": 1711504800000,
+          "ord": {
+            "file": 2,
+            "index": 1
+          },
+          "sender": "Kai Lindqvist",
+          "content": "ping me when free",
+          "utc": "2024-03-27T02:00:00Z",
+          "local": "2024-03-27 03:00:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0231",
+          "ts_ms": 1711522800000,
+          "ord": {
+            "file": 2,
+            "index": 0
+          },
+          "sender": "Sam Lee",
+          "content": "na\u00efve approach",
+          "utc": "2024-03-27T07:00:00Z",
+          "local": "2024-03-27 08:00:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0232",
+          "ts_ms": 1711540800000,
+          "ord": {
+            "file": 1,
+            "index": 12
+          },
+          "sender": "Kai Lindqvist",
+          "content": "let's split the refactor",
+          "utc": "2024-03-27T12:00:00Z",
+          "local": "2024-03-27 13:00:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0233",
+          "ts_ms": 1711558800000,
+          "ord": {
+            "file": 1,
+            "index": 11
+          },
+          "sender": "Sam Lee",
+          "content": "na\u00efve approach",
+          "utc": "2024-03-27T17:00:00Z",
+          "local": "2024-03-27 18:00:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0234",
+          "ts_ms": 1711576800000,
+          "ord": {
+            "file": 1,
+            "index": 10
+          },
+          "sender": "Kai Lindqvist",
+          "content": "lunch?",
+          "utc": "2024-03-27T22:00:00Z",
+          "local": "2024-03-27 23:00:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0235",
+          "ts_ms": 1711594800000,
+          "ord": {
+            "file": 1,
+            "index": 9
+          },
+          "sender": "Sam Lee",
+          "content": "ship it",
+          "utc": "2024-03-28T03:00:00Z",
+          "local": "2024-03-28 04:00:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0236",
+          "ts_ms": 1711612800000,
+          "ord": {
+            "file": 1,
+            "index": 8
+          },
+          "sender": "Kai Lindqvist",
+          "content": "lunch?",
+          "utc": "2024-03-28T08:00:00Z",
+          "local": "2024-03-28 09:00:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0237",
+          "ts_ms": 1711630800000,
+          "ord": {
+            "file": 1,
+            "index": 7
+          },
+          "sender": "Sam Lee",
+          "content": "bringing snacks",
+          "utc": "2024-03-28T13:00:00Z",
+          "local": "2024-03-28 14:00:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0238",
+          "ts_ms": 1711648800000,
+          "ord": {
+            "file": 1,
+            "index": 6
+          },
+          "sender": "Kai Lindqvist",
+          "content": "\u041f\u0440\u0438\u0432\u0435\u0442, \u043a\u0430\u043a \u0434\u0435\u043b\u0430?",
+          "utc": "2024-03-28T18:00:00Z",
+          "local": "2024-03-28 19:00:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0239",
+          "ts_ms": 1711666800000,
+          "ord": {
+            "file": 1,
+            "index": 5
+          },
+          "sender": "Sam Lee",
+          "content": "caf\u00e9 run at 5?",
+          "utc": "2024-03-28T23:00:00Z",
+          "local": "2024-03-29 00:00:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0240",
+          "ts_ms": 1711684800000,
+          "ord": {
+            "file": 1,
+            "index": 4
+          },
+          "sender": "Kai Lindqvist",
+          "content": "ok, sounds good",
+          "utc": "2024-03-29T04:00:00Z",
+          "local": "2024-03-29 05:00:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0241",
+          "ts_ms": 1711702800000,
+          "ord": {
+            "file": 1,
+            "index": 3
+          },
+          "sender": "Sam Lee",
+          "content": "ping me when free",
+          "utc": "2024-03-29T09:00:00Z",
+          "local": "2024-03-29 10:00:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0242",
+          "ts_ms": 1711720800000,
+          "ord": {
+            "file": 1,
+            "index": 2
+          },
+          "sender": "Kai Lindqvist",
+          "content": "the build is green again",
+          "utc": "2024-03-29T14:00:00Z",
+          "local": "2024-03-29 15:00:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0243",
+          "ts_ms": 1711738800000,
+          "ord": {
+            "file": 1,
+            "index": 1
+          },
+          "sender": "Sam Lee",
+          "content": "I'll bring the docs",
+          "utc": "2024-03-29T19:00:00Z",
+          "local": "2024-03-29 20:00:00+0100",
+          "month": "2024-03"
+        },
+        {
+          "id": "m0244",
+          "ts_ms": 1711756800000,
+          "ord": {
+            "file": 1,
+            "index": 0
+          },
+          "sender": "Kai Lindqvist",
+          "content": "emoji test \ud83c\udf89",
+          "utc": "2024-03-30T00:00:00Z",
+          "local": "2024-03-30 01:00:00+0100",
+          "month": "2024-03"
+        }
+      ],
+      "tie_pairs": []
+    },
+    {
+      "assertions": {
+        "dropped": [],
+        "within_file_dupes_kept": [],
+        "missing_media": [],
+        "traversal_rejected": [],
+        "bare_filename_media": [],
+        "hostile_media": [],
+        "calendar_fixtures": []
+      },
+      "key": "ana_silva_5544",
+      "title": "Ana Silva",
+      "participants": [
+        "Ana Silva",
+        "Kai Lindqvist"
+      ],
+      "file_count": 1,
+      "raw_count": 12,
+      "message_count": 12,
+      "months": [
+        {
+          "key": "2024-04",
+          "count": 12,
+          "first_ts_ms": 1713052800000,
+          "last_ts_ms": 1713092400000
+        }
+      ],
+      "order": [
+        {
+          "id": "m0245",
+          "ts_ms": 1713052800000,
+          "ord": {
+            "file": 1,
+            "index": 11
+          },
+          "sender": "Ana Silva",
+          "content": "single file thread hello",
+          "utc": "2024-04-14T00:00:00Z",
+          "local": "2024-04-14 02:00:00+0200",
+          "month": "2024-04"
+        },
+        {
+          "id": "m0246",
+          "ts_ms": 1713056400000,
+          "ord": {
+            "file": 1,
+            "index": 10
+          },
+          "sender": "Kai Lindqvist",
+          "content": "",
+          "utc": "2024-04-14T01:00:00Z",
+          "local": "2024-04-14 03:00:00+0200",
+          "month": "2024-04"
+        },
+        {
+          "id": "m0247",
+          "ts_ms": 1713060000000,
+          "ord": {
+            "file": 1,
+            "index": 9
+          },
+          "sender": "Ana Silva",
+          "content": "shared something",
+          "utc": "2024-04-14T02:00:00Z",
+          "local": "2024-04-14 04:00:00+0200",
+          "month": "2024-04"
+        },
+        {
+          "id": "m0248",
+          "ts_ms": 1713063600000,
+          "ord": {
+            "file": 1,
+            "index": 8
+          },
+          "sender": "Kai Lindqvist",
+          "content": "never mind",
+          "utc": "2024-04-14T03:00:00Z",
+          "local": "2024-04-14 05:00:00+0200",
+          "month": "2024-04"
+        },
+        {
+          "id": "m0249",
+          "ts_ms": 1713067200000,
+          "ord": {
+            "file": 1,
+            "index": 7
+          },
+          "sender": "Ana Silva",
+          "content": "ty!",
+          "utc": "2024-04-14T04:00:00Z",
+          "local": "2024-04-14 06:00:00+0200",
+          "month": "2024-04"
+        },
+        {
+          "id": "m0250",
+          "ts_ms": 1713070800000,
+          "ord": {
+            "file": 1,
+            "index": 6
+          },
+          "sender": "Kai Lindqvist",
+          "content": "I'll bring the docs",
+          "utc": "2024-04-14T05:00:00Z",
+          "local": "2024-04-14 07:00:00+0200",
+          "month": "2024-04"
+        },
+        {
+          "id": "m0251",
+          "ts_ms": 1713074400000,
+          "ord": {
+            "file": 1,
+            "index": 5
+          },
+          "sender": "Ana Silva",
+          "content": "ack",
+          "utc": "2024-04-14T06:00:00Z",
+          "local": "2024-04-14 08:00:00+0200",
+          "month": "2024-04"
+        },
+        {
+          "id": "m0252",
+          "ts_ms": 1713078000000,
+          "ord": {
+            "file": 1,
+            "index": 4
+          },
+          "sender": "Kai Lindqvist",
+          "content": "\u0645\u0631\u062d\u0628\u0627, \u0643\u064a\u0641 \u062d\u0627\u0644\u0643\u061f",
+          "utc": "2024-04-14T07:00:00Z",
+          "local": "2024-04-14 09:00:00+0200",
+          "month": "2024-04"
+        },
+        {
+          "id": "m0253",
+          "ts_ms": 1713081600000,
+          "ord": {
+            "file": 1,
+            "index": 3
+          },
+          "sender": "Ana Silva",
+          "content": "\u0645\u0631\u062d\u0628\u0627, \u0643\u064a\u0641 \u062d\u0627\u0644\u0643\u061f",
+          "utc": "2024-04-14T08:00:00Z",
+          "local": "2024-04-14 10:00:00+0200",
+          "month": "2024-04"
+        },
+        {
+          "id": "m0254",
+          "ts_ms": 1713085200000,
+          "ord": {
+            "file": 1,
+            "index": 2
+          },
+          "sender": "Kai Lindqvist",
+          "content": "the build is green again",
+          "utc": "2024-04-14T09:00:00Z",
+          "local": "2024-04-14 11:00:00+0200",
+          "month": "2024-04"
+        },
+        {
+          "id": "m0255",
+          "ts_ms": 1713088800000,
+          "ord": {
+            "file": 1,
+            "index": 1
+          },
+          "sender": "Ana Silva",
+          "content": "ping me when free",
+          "utc": "2024-04-14T10:00:00Z",
+          "local": "2024-04-14 12:00:00+0200",
+          "month": "2024-04"
+        },
+        {
+          "id": "m0256",
+          "ts_ms": 1713092400000,
+          "ord": {
+            "file": 1,
+            "index": 0
+          },
+          "sender": "Kai Lindqvist",
+          "content": "let's split the refactor",
+          "utc": "2024-04-14T11:00:00Z",
+          "local": "2024-04-14 13:00:00+0200",
+          "month": "2024-04"
+        }
+      ],
+      "tie_pairs": []
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "messages": [
+    {
+      "content": "emoji test \u00f0\u009f\u008e\u0089",
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1711756800000
+    },
+    {
+      "content": "I'll bring the docs",
+      "sender_name": "Sam Lee",
+      "timestamp_ms": 1711738800000
+    },
+    {
+      "content": "the build is green again",
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1711720800000
+    },
+    {
+      "content": "ping me when free",
+      "sender_name": "Sam Lee",
+      "timestamp_ms": 1711702800000
+    },
+    {
+      "content": "ok, sounds good",
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1711684800000
+    },
+    {
+      "content": "caf\u00c3\u00a9 run at 5?",
+      "sender_name": "Sam Lee",
+      "timestamp_ms": 1711666800000
+    },
+    {
+      "content": "\u00d0\u009f\u00d1\u0080\u00d0\u00b8\u00d0\u00b2\u00d0\u00b5\u00d1\u0082, \u00d0\u00ba\u00d0\u00b0\u00d0\u00ba \u00d0\u00b4\u00d0\u00b5\u00d0\u00bb\u00d0\u00b0?",
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1711648800000
+    },
+    {
+      "content": "bringing snacks",
+      "sender_name": "Sam Lee",
+      "timestamp_ms": 1711630800000
+    },
+    {
+      "content": "lunch?",
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1711612800000
+    },
+    {
+      "content": "ship it",
+      "sender_name": "Sam Lee",
+      "timestamp_ms": 1711594800000
+    },
+    {
+      "content": "lunch?",
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1711576800000
+    },
+    {
+      "content": "na\u00c3\u00afve approach",
+      "sender_name": "Sam Lee",
+      "timestamp_ms": 1711558800000
+    },
+    {
+      "content": "let's split the refactor",
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1711540800000
+    }
+  ],
+  "participants": [
+    {
+      "name": "Sam Lee"
+    },
+    {
+      "name": "Kai Lindqvist"
+    }
+  ],
+  "title": "Sam Lee"
+}

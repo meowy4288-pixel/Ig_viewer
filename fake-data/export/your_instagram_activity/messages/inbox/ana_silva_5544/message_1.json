@@ -1,0 +1,77 @@
+{
+  "messages": [
+    {
+      "content": "let's split the refactor",
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1713092400000
+    },
+    {
+      "content": "ping me when free",
+      "sender_name": "Ana Silva",
+      "timestamp_ms": 1713088800000
+    },
+    {
+      "content": "the build is green again",
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1713085200000
+    },
+    {
+      "content": "\u00d9\u0085\u00d8\u00b1\u00d8\u00ad\u00d8\u00a8\u00d8\u00a7, \u00d9\u0083\u00d9\u008a\u00d9\u0081 \u00d8\u00ad\u00d8\u00a7\u00d9\u0084\u00d9\u0083\u00d8\u009f",
+      "sender_name": "Ana Silva",
+      "timestamp_ms": 1713081600000
+    },
+    {
+      "content": "\u00d9\u0085\u00d8\u00b1\u00d8\u00ad\u00d8\u00a8\u00d8\u00a7, \u00d9\u0083\u00d9\u008a\u00d9\u0081 \u00d8\u00ad\u00d8\u00a7\u00d9\u0084\u00d9\u0083\u00d8\u009f",
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1713078000000
+    },
+    {
+      "content": "ack",
+      "sender_name": "Ana Silva",
+      "timestamp_ms": 1713074400000
+    },
+    {
+      "content": "I'll bring the docs",
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1713070800000
+    },
+    {
+      "content": "ty!",
+      "sender_name": "Ana Silva",
+      "timestamp_ms": 1713067200000
+    },
+    {
+      "content": "never mind",
+      "is_unsent": true,
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1713063600000
+    },
+    {
+      "content": "shared something",
+      "sender_name": "Ana Silva",
+      "share": {
+        "link": "https://example.invalid/x",
+        "share_text": "see this"
+      },
+      "timestamp_ms": 1713060000000
+    },
+    {
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1713056400000
+    },
+    {
+      "content": "single file thread hello",
+      "sender_name": "Ana Silva",
+      "timestamp_ms": 1713052800000
+    }
+  ],
+  "participants": [
+    {
+      "name": "Ana Silva"
+    },
+    {
+      "name": "Kai Lindqvist"
+    }
+  ],
+  "title": "Ana Silva"
+}

@@ -1,0 +1,93 @@
+{
+  "messages": [
+    {
+      "content": "\u00e6\u0097\u00a5\u00e6\u009c\u00ac\u00e8\u00aa\u009e\u00e3\u0082\u0082Visa",
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1704855027033
+    },
+    {
+      "content": "\u00d0\u009f\u00d1\u0080\u00d0\u00b8\u00d0\u00b2\u00d0\u00b5\u00d1\u0082, \u00d0\u00ba\u00d0\u00b0\u00d0\u00ba \u00d0\u00b4\u00d0\u00b5\u00d0\u00bb\u00d0\u00b0?",
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704851481102
+    },
+    {
+      "content": "ok, sounds good",
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704848819655
+    },
+    {
+      "content": "ship it",
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1704845068896
+    },
+    {
+      "content": "\ud83d\ude00\ud83c\udf89",
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704841202015
+    },
+    {
+      "content": "that bug was a typo",
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704838094836
+    },
+    {
+      "content": "caf\u00c3\u00a9 run at 5?",
+      "photos": [
+        {
+          "uri": "your_instagram_activity/messages/inbox/mira_okonkwo_4821/photos/photo_0117.png"
+        }
+      ],
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1704834235192
+    },
+    {
+      "audio_files": [
+        {
+          "uri": "your_instagram_activity/messages/inbox/mira_okonkwo_4821/audio/voice_0116.m4a"
+        }
+      ],
+      "content": "deploy window is 02:00",
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704830953873
+    },
+    {
+      "content": "bringing snacks",
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704826324144,
+      "videos": [
+        {
+          "uri": "your_instagram_activity/messages/inbox/mira_okonkwo_4821/videos/video_0115.mp4"
+        }
+      ]
+    },
+    {
+      "content": "ship it",
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1704822600323
+    },
+    {
+      "content": "that bug was a typo",
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704819794078
+    },
+    {
+      "content": "na\u00c3\u00afve approach",
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704816156871
+    },
+    {
+      "content": "the build is green again",
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1704811941838
+    }
+  ],
+  "participants": [
+    {
+      "name": "Mira Okonkwo"
+    },
+    {
+      "name": "Kai Lindqvist"
+    }
+  ],
+  "title": "Mira Okonkwo"
+}

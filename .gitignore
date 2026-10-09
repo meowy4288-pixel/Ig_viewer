@@ -2,6 +2,8 @@ node_modules/
 dist/
 src-tauri/target/
 src-tauri/gen/schemas/
+__pycache__/
+*.pyc
 
 # Never commit real chat exports. Fake test data lives only in fake-data/
 # (tracked via the negation below); everything else matching these shapes is

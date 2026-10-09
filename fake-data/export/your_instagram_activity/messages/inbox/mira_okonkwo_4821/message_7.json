@@ -1,0 +1,88 @@
+{
+  "messages": [
+    {
+      "content": "the build is green again",
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704668766311
+    },
+    {
+      "content": "bringing snacks",
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704665008288
+    },
+    {
+      "content": "na\u00c3\u00afve approach",
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1704661178043,
+      "videos": [
+        {
+          "uri": "your_instagram_activity/messages/inbox/mira_okonkwo_4821/videos/video_0069.mp4"
+        }
+      ]
+    },
+    {
+      "content": "na\u00efve \u2014 dash",
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704657794939
+    },
+    {
+      "content": "bringing snacks",
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704654040214
+    },
+    {
+      "content": "\u00d9\u0085\u00d8\u00b1\u00d8\u00ad\u00d8\u00a8\u00d8\u00a7, \u00d9\u0083\u00d9\u008a\u00d9\u0081 \u00d8\u00ad\u00d8\u00a7\u00d9\u0084\u00d9\u0083\u00d8\u009f",
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1704650552236
+    },
+    {
+      "content": "deploy window is 02:00",
+      "photos": [
+        {
+          "uri": "your_instagram_activity/messages/inbox/mira_okonkwo_4821/photos/photo_0065.png"
+        }
+      ],
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704646860879
+    },
+    {
+      "content": "emoji test \u00f0\u009f\u008e\u0089",
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704643243699
+    },
+    {
+      "content": "deploy window is 02:00",
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1704639402904
+    },
+    {
+      "content": "lunch?",
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704635463410
+    },
+    {
+      "content": "ty!",
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704632474595
+    },
+    {
+      "content": "let's split the refactor",
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1704629184004
+    },
+    {
+      "content": "ty!",
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704625475618
+    }
+  ],
+  "participants": [
+    {
+      "name": "Mira Okonkwo"
+    },
+    {
+      "name": "Kai Lindqvist"
+    }
+  ],
+  "title": "Mira Okonkwo"
+}

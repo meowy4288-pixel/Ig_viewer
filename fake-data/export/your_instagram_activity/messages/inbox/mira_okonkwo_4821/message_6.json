@@ -1,0 +1,104 @@
+{
+  "messages": [
+    {
+      "content": "cross file identical except reactions",
+      "reactions": [
+        {
+          "actor": "Kai Lindqvist",
+          "reaction": "\u00f0\u009f\u008e\u0089"
+        }
+      ],
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704438004242
+    },
+    {
+      "content": "\u00e6\u0097\u00a5\u00e6\u009c\u00ac\u00e8\u00aa\u009e\u00e3\u0082\u0082Visa",
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704761452549
+    },
+    {
+      "content": "\u00d9\u0085\u00d8\u00b1\u00d8\u00ad\u00d8\u00a8\u00d8\u00a7, \u00d9\u0083\u00d9\u008a\u00d9\u0081 \u00d8\u00ad\u00d8\u00a7\u00d9\u0084\u00d9\u0083\u00d8\u009f",
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1704758443638
+    },
+    {
+      "content": "family emoji \u00f0\u009f\u0098\u0080\u00f0\u009f\u008e\u0082",
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704755166700
+    },
+    {
+      "content": "bringing snacks",
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704750688723
+    },
+    {
+      "content": "let's split the refactor",
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1704747497126
+    },
+    {
+      "content": "let's split the refactor",
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704743804341,
+      "videos": [
+        {
+          "uri": "your_instagram_activity/messages/inbox/mira_okonkwo_4821/videos/video_0092.mp4"
+        }
+      ]
+    },
+    {
+      "content": "family emoji \u00f0\u009f\u0098\u0080\u00f0\u009f\u008e\u0082",
+      "photos": [
+        {
+          "uri": "your_instagram_activity/messages/inbox/mira_okonkwo_4821/photos/photo_0091.png"
+        }
+      ],
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704739843738
+    },
+    {
+      "content": "ty!",
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1704737225336
+    },
+    {
+      "content": "family emoji \u00f0\u009f\u0098\u0080\u00f0\u009f\u008e\u0082",
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704732768470
+    },
+    {
+      "content": "na\u00c3\u00afve approach",
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704729310657
+    },
+    {
+      "audio_files": [
+        {
+          "uri": "your_instagram_activity/messages/inbox/mira_okonkwo_4821/audio/voice_0087.m4a"
+        }
+      ],
+      "content": "ok, sounds good",
+      "sender_name": "Kai Lindqvist",
+      "timestamp_ms": 1704725433227
+    },
+    {
+      "content": "deploy window is 02:00",
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704722840745
+    },
+    {
+      "content": "caf\u00e9",
+      "sender_name": "Mira Okonkwo",
+      "timestamp_ms": 1704719260785
+    }
+  ],
+  "participants": [
+    {
+      "name": "Mira Okonkwo"
+    },
+    {
+      "name": "Kai Lindqvist"
+    }
+  ],
+  "title": "Mira Okonkwo"
+}

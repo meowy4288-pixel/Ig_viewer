@@ -7,4 +7,8 @@ Hard rules:
 - Never commit real chat data. Tests use only generated fake data.
 - Fake data lives only in fake-data/, generated with a fixed seed so runs are reproducible. Nothing real ever goes there.
 - Logging must never include message text or export paths.
+- Dedupe rule (canonical): a message read from file N is dropped only if its key
+  (timestamp_ms, sender_name, content, media URIs) already appeared in a file with a
+  LOWER file number. Within a single file identical messages are all kept. The
+  first-encountered copy wins. Reactions are NOT part of the key.
 - Verify framework APIs against current Tauri 2 docs before using them.
