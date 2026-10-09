@@ -67,13 +67,41 @@
     },
     {
       "content": "let's split the refactor",
+      "gifs": [
+        {
+          "uri": "your_instagram_activity/messages/inbox/mira_okonkwo_4821/gifs/multi_gif_60.png"
+        }
+      ],
+      "photos": [
+        {
+          "uri": "your_instagram_activity/messages/inbox/mira_okonkwo_4821/photos/multi2_photo_60.png"
+        }
+      ],
       "sender_name": "Kai Lindqvist",
+      "sticker": {
+        "uri": "your_instagram_activity/messages/inbox/mira_okonkwo_4821/photos/multi2_sticker_60.png"
+      },
       "timestamp_ms": 1704629184004
     },
     {
+      "audio_files": [
+        {
+          "uri": "your_instagram_activity/messages/inbox/mira_okonkwo_4821/audio/multi_voice_59.m4a"
+        }
+      ],
       "content": "ty!",
+      "photos": [
+        {
+          "uri": "your_instagram_activity/messages/inbox/mira_okonkwo_4821/photos/multi_photo_59.png"
+        }
+      ],
       "sender_name": "Mira Okonkwo",
-      "timestamp_ms": 1704625475618
+      "timestamp_ms": 1704625475618,
+      "videos": [
+        {
+          "uri": "your_instagram_activity/messages/inbox/mira_okonkwo_4821/videos/multi_video_59.mp4"
+        }
+      ]
     }
   ],
   "participants": [

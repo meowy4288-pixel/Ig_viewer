@@ -12,12 +12,10 @@
     },
     {
       "content": "lunch?",
-      "gifs": [
-        {
-          "uri": "your_instagram_activity/messages/inbox/mira_okonkwo_4821/gifs/sticker_44.png"
-        }
-      ],
       "sender_name": "Mira Okonkwo",
+      "sticker": {
+        "uri": "your_instagram_activity/messages/inbox/mira_okonkwo_4821/photos/sticker_44.png"
+      },
       "timestamp_ms": 1704571762944
     },
     {

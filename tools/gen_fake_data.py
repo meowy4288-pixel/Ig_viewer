@@ -197,9 +197,29 @@ def build_timeline(rng):
             # path-traversal attempt: must never be read
             kw["media"] = {"photos": ["../../../../etc/passwd"]}
         elif idx == 44:
-            kw["media"] = {"gifs": [media_uri(key, "gifs", f"sticker_{idx}.png")]}
+            # A REAL sticker. In Instagram's schema `sticker` is a single
+            # {"uri": ...} object, not an array -- confirmed against
+            # ig_chat_rebuild.py (st.get("uri")) and ig_chat_viewer.html
+            # (m.sticker.uri). encode_message() writes it in that shape.
+            kw["media"] = {"sticker": [media_uri(key, "photos", f"sticker_{idx}.png")]}
         elif idx == 45:
             kw["media"] = {"files": [media_uri(key, "files", f"doc_{idx}.pdf")]}
+        elif idx == 59:
+            # Multi-kind message: a photo AND a voice note AND a video in one
+            # message. An `or` chain in the dedupe key would drop every kind after
+            # the first, so this is the fixture that catches that bug class.
+            kw["media"] = {
+                "photos": [media_uri(key, "photos", f"multi_photo_{idx}.png")],
+                "audio_files": [media_uri(key, "audio", f"multi_voice_{idx}.m4a")],
+                "videos": [media_uri(key, "videos", f"multi_video_{idx}.mp4")],
+            }
+        elif idx == 60:
+            # Multi-kind including a sticker, in a second combination.
+            kw["media"] = {
+                "gifs": [media_uri(key, "gifs", f"multi_gif_{idx}.png")],
+                "photos": [media_uri(key, "photos", f"multi2_photo_{idx}.png")],
+                "sticker": [media_uri(key, "photos", f"multi2_sticker_{idx}.png")],
+            }
         elif idx == 47:
             kw["share"] = {"link": "https://example.invalid/a?b=c",
                            "share_text": "shared link text café"}
@@ -466,9 +486,7 @@ def write_export(out_root, msgs, files_by_thread, tz):
     written = set()
     for m in msgs:
         for folder, items in m.media.items():
-            if folder == "sticker":
-                continue
-            for uri in items:
+            for mi, uri in enumerate(items):
                 if not isinstance(uri, str) or "/" not in uri:
                     continue            # bare filename: nothing to write
                 path = (exp / uri).resolve()
@@ -547,8 +565,6 @@ def build_expected(msgs, files_by_thread, tzname):
         missing_media, traversal_rejected, bare_filename, path_only, hostile = [], [], [], [], []
         for m in tmsgs:
             for folder, items in m.media.items():
-                if folder == "sticker":
-                    continue
                 for mi, uri in enumerate(items):
                     # Keyed by (id, media index) so one message holding two hostile
                     # entries keeps them as two separate records.
