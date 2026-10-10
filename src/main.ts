@@ -8,6 +8,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import {
   type MonthBucket,
   type ThreadSummary,
@@ -161,7 +162,19 @@ async function onPickZip(): Promise<void> {
   status("Waiting for the file picker\u2026");
   let raw: string | null;
   try {
-    raw = await invoke<string | null>("pick_export_zip");
+    const viaDialog = await pickViaDialog({
+      directory: false,
+      filters: [{ name: "Instagram export", extensions: ["zip"] }],
+    });
+    if (viaDialog !== undefined) {
+      if (viaDialog === null) {
+        status("File selection cancelled.");
+        return;
+      }
+      raw = viaDialog;
+    } else {
+      raw = await invoke<string | null>("pick_export_zip");
+    }
   } catch (err) {
     status(`Could not open the file picker (${String(err)}).`);
     return;
@@ -228,10 +241,45 @@ async function onPickAppDir(): Promise<void> {
   }
 }
 
+/**
+ * Try the dialog plugin.
+ *
+ * Returns undefined when the plugin is unavailable (desktop, where rfd is used),
+ * a path when the user chose something, or null when they cancelled. Feature
+ * detection by attempting the call is deliberate: sniffing the user agent is
+ * unreliable in the Tauri webview and previously routed Android users into the
+ * stubbed desktop pickers.
+ */
+async function pickViaDialog(opts: {
+  directory: boolean;
+  filters?: { name: string; extensions: string[] }[];
+}): Promise<string | null | undefined> {
+  try {
+    const picked = await open({
+      multiple: false,
+      directory: opts.directory,
+      ...(opts.filters ? { filters: opts.filters } : {}),
+    });
+    return picked === null ? null : String(picked);
+  } catch {
+    return undefined;
+  }
+}
+
 async function onPick(): Promise<void> {
   status("Waiting for the folder picker\u2026");
   let raw: string | null;
   try {
+    const viaDialog = await pickViaDialog({ directory: true });
+    if (viaDialog !== undefined) {
+      if (viaDialog === null) {
+        status("Folder selection cancelled.");
+        return;
+      }
+      $<HTMLInputElement>("#root").value = viaDialog;
+      await doIndex(viaDialog);
+      return;
+    }
     raw = await invoke<string | null>("pick_export_folder");
   } catch (err) {
     status(`Could not open the folder picker (${String(err)}).`);
