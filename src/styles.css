@@ -662,10 +662,11 @@ html.light .avatar {
 
 /* On Android the native pickers return "picker-unavailable", so they are hidden and
    the push-import button is shown instead. */
+/* Hide only the native pickers, which are stubbed on Android. The path field and
+   Index button stay: with storage access granted, naming a path manually is the
+   import route. */
 html.no-native-picker #pick,
-html.no-native-picker #pickzip,
-html.no-native-picker #root,
-html.no-native-picker #index {
+html.no-native-picker #pickzip {
   display: none;
 }
 /* Hidden by default, shown only on Android. Must not use the `hidden` attribute:

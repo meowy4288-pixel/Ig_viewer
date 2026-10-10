@@ -283,6 +283,29 @@ async function doIndex(prefilledRoot?: string): Promise<void> {
     status("Type the export folder path first, or use Choose export folder.");
     return;
   }
+  // A .zip is extracted into app storage first; a folder is indexed where it lies.
+  if (root.toLowerCase().endsWith(".zip")) {
+    status("Extracting zip\u2026");
+    try {
+      const res = JSON.parse(await invoke<string>("extract_export", { zipPath: root })) as {
+        archive_id: string;
+        export_root: string;
+        files: number;
+        rejected: number;
+      };
+      $<HTMLInputElement>("#root").value = res.export_root;
+      status(`Extracted ${res.files} files. Indexing\u2026`);
+      await doIndex(res.export_root);
+      status(
+        `Imported ${res.files} files${res.rejected ? ` (${res.rejected} unsafe entries skipped)` : ""}.`,
+      );
+      return;
+    } catch (err) {
+      status(`Extraction failed: ${String(err)}`);
+      return;
+    }
+  }
+
   status("Indexing\u2026");
   try {
     // An empty archiveId tells Rust to mint a new archive, which is what the

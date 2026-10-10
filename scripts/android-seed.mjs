@@ -12,6 +12,14 @@ import { cp, mkdir, rm, readdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
+// Opt-in. The bundled sample was only useful before on-device import worked; with
+// manual path import a real export can be used instead, and shipping several MB of
+// fake chats in a release build is pointless. Run explicitly with --seed if wanted.
+if (!process.argv.includes("--seed")) {
+  console.log("Skipping seed (pass --seed to bundle the sample archive).");
+  process.exit(0);
+}
+
 const root = path.resolve(import.meta.dirname, "..");
 const assets = path.join(
   root,
