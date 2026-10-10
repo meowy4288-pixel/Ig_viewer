@@ -109,10 +109,49 @@ was intermittently captured as blank. Marking them "verified" would be a false r
 | Delete index via the UI button | backend verified, button not clicked | as above |
 | UTC fallback banner | **not triggerable on this host** | system tz detection succeeded (`Asia/Kolkata`), so the fallback branch was never entered. Code path covered by unit test only. |
 
-## Known failure: media playback does not work
+## Media outcome: images render, audio and video do not
 
-`<audio>` and `<video>` **cannot play over a custom URI scheme on WebKitGTK.**
-Images work; media does not.
+**Observed on the packaged build by the user: photos render ("different designs" per
+message). Audio and video produce no playback.**
+
+### The correction that matters
+
+An earlier entry in this document claimed images worked. **That was wrong, twice
+over:**
+
+1. The "evidence" was a direct call to `protocol::serve()` in Rust. That bypasses
+   Tauri's URI-scheme routing entirely, so it proved the *file reading* worked and
+   nothing about whether a browser request ever reached the handler.
+2. The thing visible on screen was the **reserved layout box of a broken image**,
+   which was mistaken for a rendered photo. Zooming in showed WebKit's `?`
+   placeholder.
+
+Instrumenting the handler is what actually caught it:
+
+```
+[igmedia] ENTER path=/0f5de2e832eb1cf747da4e20f647c0af/1
+[igmedia] ENTER path=/0f5de2e832eb1cf747da4e20f647c0af/3
+... (14 entered, 0 served)
+```
+
+Every request failed. Cause: `parse_media_url` required the path to start with
+`media/`, but `igmedia://media/<archive>/<id>` puts `media` in the **host**, so the
+handler receives `/<archive>/<id>`. After the fix, photos render as the user confirms.
+
+**Lesson recorded in AGENTS.md: verify the protocol end-to-end through the running
+app. A direct `protocol::serve()` call is not a substitute.**
+
+## Images render; audio and video do not
+
+**Verified on the packaged build: photos DO render.** This was broken until a real
+bug was found: `parse_media_url` required the path to start with `media/`, but
+`igmedia://media/<archive>/<id>` puts `media` in the HOST, so the handler actually
+receives `/<archive>/<id>`. Every request therefore failed to parse. Earlier claims
+that images worked were based on calling `protocol::serve()` directly, which bypasses
+Tauri's routing and so proved nothing. Caught by instrumenting the handler: 14
+requests entered, 0 served. Fixed; the parser now accepts both shapes.
+
+`<audio>` and `<video>` still **cannot play over a custom URI scheme on WebKitGTK.**
 
 The `igmedia` protocol is not at fault -- it returns the correct status, MIME type,
 bytes and `206` ranges (evidence above). The failure is that WebKitGTK hands
@@ -149,13 +188,14 @@ Possible remedies, **none taken** because each requires a CSP change:
   `tauri-apps/binary-releases`, which failed here on a download timeout. The `.deb`
   is the offline-buildable and offline-verified artifact.
 
-## Unresolved
+## Dropped
 
-* **"panic on export"** -- reported by the user but never reproduced or located.
-  This build contains **no export-writing code**; it only reads. The only file it
-  writes is its own SQLite index in the app data dir. No fix was attempted because
-  the symptom is undefined. Awaiting the exact message, the window it happened in,
-  and the steps that produced it.
+* **"panic on export"** -- DROPPED. Reported without an error message, window, or
+  reproduction steps, and asked for twice. This build contains **no export-writing
+  code**: it reads the export and writes only its own SQLite index into the app data
+  directory. There is nothing that exports, so there is no code path to fix. Recorded
+  here rather than left as an open item, because an undefined symptom cannot be
+  actioned and guessing at a fix would be worse than dropping it.
 
 ## Reproducing this verification
 

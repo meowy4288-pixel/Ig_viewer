@@ -18,7 +18,7 @@ import {
   monthOfIsoDate,
   tsForIsoDate,
 } from "./logic";
-import { el, renderMonth, renderSearchHit } from "./ui";
+import { closeLightbox, el, renderMonth, renderSearchHit } from "./ui";
 
 interface ArchiveState {
   id: string;
@@ -390,6 +390,11 @@ function wire(): void {
     void showMonth(state.monthIndex);
   });
   $("#tzset").addEventListener("click", () => void changeTimezone());
+  // Click anywhere on the overlay to dismiss; Escape works too.
+  $("#lightbox").addEventListener("click", () => closeLightbox());
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeLightbox();
+  });
 }
 
 async function changeTimezone(): Promise<void> {

@@ -198,15 +198,24 @@ pub fn serve(
     })
 }
 
-/// Parse `igmedia://media/<archive_id>/<media_id>` into its parts.
+/// Parse a media URL into `(archive_id, media_id)`.
 ///
-/// Rejects anything else outright, including extra path segments, so a crafted URL
-/// cannot smuggle a second component past the resolver.
+/// Accepts the path Tauri hands us for either spelling of the URL:
+///   * `igmedia://media/<archive>/<id>` -- `media` lands in the HOST, so the path
+///     the handler receives is `/<archive>/<id>` (no `media` segment). This is the
+///     form `media_url()` generates.
+///   * `igmedia:///media/<archive>/<id>` -- an explicit leading `media` segment.
+///
+/// An earlier version only accepted the second form, so EVERY request failed to
+/// parse and no media ever loaded. Both are accepted now, and anything else -- extra
+/// segments, a missing part, a non-numeric id, a non-positive id -- is rejected.
 pub fn parse_media_url(path: &str) -> Result<(String, i64), ServeError> {
     let p = path.trim_start_matches('/');
     let mut it = p.split('/');
-    if it.next() != Some("media") {
-        return Err(ServeError::BadRequest);
+    // Tolerate an explicit leading "media" segment; it is optional because the
+    // usual URL form carries it in the host instead.
+    if it.clone().next() == Some("media") {
+        it.next();
     }
     let archive = it.next().ok_or(ServeError::BadRequest)?;
     let id = it.next().ok_or(ServeError::BadRequest)?;
@@ -257,6 +266,24 @@ mod tests {
         assert_eq!(parse_range("bytes=0-10,20-30", 1000), None);
         assert_eq!(parse_range("items=0-10", 1000), None);
         assert_eq!(parse_range("-", 1000), None);
+    }
+
+    #[test]
+    fn url_parsing_accepts_the_form_the_handler_actually_receives() {
+        // igmedia://media/<archive>/<id> puts "media" in the HOST, so Tauri hands
+        // the handler a path with NO leading media segment. Regression: this form
+        // used to be rejected, so no media ever loaded.
+        let id = "0f5de2e832eb1cf747da4e20f647c0af";
+        let url = media_url(id, 18);
+        assert_eq!(url, format!("igmedia://media/{id}/18"));
+        let path = format!("/{id}/18"); // what request.uri().path() yields
+        assert_eq!(parse_media_url(&path), Ok((id.to_string(), 18)));
+
+        // The explicit-segment form must keep working too.
+        assert_eq!(
+            parse_media_url(&format!("/media/{id}/18")),
+            Ok((id.to_string(), 18))
+        );
     }
 
     #[test]

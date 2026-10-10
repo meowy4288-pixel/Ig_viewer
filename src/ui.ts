@@ -79,9 +79,13 @@ export function renderMedia(m: UiMedia): HTMLElement | null {
   if (isImageKind(m.kind)) {
     const img = document.createElement("img");
     img.loading = "lazy";
-    img.alt = "photo";
+    img.alt = m.kind === "sticker" ? "sticker" : "photo";
     img.src = url;
-    img.className = m.kind === "sticker" ? "sticker" : "";
+    img.className = m.kind === "sticker" ? "sticker" : "photo";
+    if (m.kind !== "sticker") {
+      // Click to inspect full-screen; the src is re-used, never re-fetched.
+      img.addEventListener("click", () => openLightbox(img));
+    }
     return img;
   }
   if (isVideoKind(m.kind)) {
@@ -99,6 +103,22 @@ export function renderMedia(m: UiMedia): HTMLElement | null {
     return a;
   }
   return el("div", "dim", `(${m.kind} cannot be previewed)`);
+}
+
+/** Show a photo full-screen. Sets src/textContent only; no markup. */
+export function openLightbox(img: HTMLImageElement): void {
+  const box = document.getElementById("lightbox");
+  const target = document.getElementById("lightbox-img") as HTMLImageElement | null;
+  if (!box || !target) return;
+  target.src = img.src;
+  target.alt = img.alt;
+  box.hidden = false;
+}
+
+/** Hide the lightbox. */
+export function closeLightbox(): void {
+  const box = document.getElementById("lightbox");
+  if (box) box.hidden = true;
 }
 
 /** Render one message bubble. */

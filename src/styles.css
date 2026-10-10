@@ -194,6 +194,31 @@ a {
   display: block;
   margin: 4px 0;
 }
+/* Photos are clickable: open full-screen to inspect. */
+.bubble img.photo {
+  cursor: zoom-in;
+}
+/* The overlay is only laid out while it is NOT hidden. An unconditional
+   `display: none` here previously meant clearing the `hidden` attribute changed
+   nothing and the lightbox could never open. */
+#lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.92);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  cursor: zoom-out;
+}
+#lightbox:not([hidden]) {
+  display: flex;
+}
+#lightbox img {
+  max-width: 96vw;
+  max-height: 96vh;
+  border-radius: 8px;
+}
 .bubble img.sticker {
   max-width: 130px;
 }

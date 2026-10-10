@@ -64,13 +64,20 @@ Hard rules:
   so the marker can never be mistaken for markup). The snippet is untrusted chat
   content and is rendered with textContent into a <mark> element created in ui.ts.
 - KNOWN LIMITATION (WebKitGTK): <audio>/<video> CANNOT play over a custom URI
-  scheme. Images work (they use WebKit's resource loader, which knows custom
-  schemes) but media is handed to GStreamer, whose uridecodebin has no URL handler
-  for igmedia: -- WebKit Bug 146351, and Wails #4412 shows the identical failure.
-  The igmedia protocol itself serves media correctly (200/206, right MIME and
-  bytes), so this is a platform limitation, not an app bug. Fixing it needs either
-  blob: object URLs fed over IPC, or a loopback HTTP server -- both require a CSP
-  change and were NOT taken.
+  scheme. IMAGES DO WORK -- verified on the packaged build. Only media is handed to
+  GStreamer, whose uridecodebin has no URL handler for igmedia: (WebKit Bug 146351;
+  Wails #4412 shows the identical failure). This is a platform limitation, not an app
+  bug: the protocol serves media correctly (200/206, right MIME, right bytes).
+  Workarounds (blob: object URLs over IPC, or a loopback HTTP server) each need a
+  CSP change and were NOT taken.
+- The custom-scheme URL path the handler receives is /<archive_id>/<media_id> --
+  "media" lands in the HOST for igmedia://media/..., not in the path. parse_media_url
+  must accept that shape; getting it wrong silently serves nothing at all while the
+  backend probe still looks healthy, because calling protocol::serve() directly
+  bypasses Tauri's routing entirely. Verify the protocol end-to-end through the
+  running app, not through a direct call.
+- The app installs no logger, so log:: macros go nowhere. Aggregate ingest counts are
+  computed and returned to the UI, but are not persisted to any log file.
 - PACKAGING (deliberate): the .deb declares Debian/Ubuntu dependency names
   (libwebkit2gtk-4.1-0, libgtk-3-0). On Fedora those libraries are named
   webkit2gtk4.1 and gtk3, so dpkg leaves the package in state iU even though
@@ -85,9 +92,18 @@ Hard rules:
   a folder) has no message row, therefore no media id, therefore nothing to serve.
   This is intentional: importing loose files would mean copying data into the
   archive or exposing filesystem paths to the webview, both of which are worse.
-- FIXTURES: images are real 96x96 PNGs (stdlib zlib/struct, distinct hue + binary
-  stripe pattern per message) and voice notes are real 8-bit PCM WAVs (stdlib wave,
-  pitch encodes the index) so indexing and serving can be checked by eye and ear.
-  Video remains an ftyp stub: producing a decodable MP4 is out of proportion, and
-  the protocol path is identical for audio and video.
+- Media outcome: images render; audio/video do not. Option B was chosen, so the CSP
+  is UNCHANGED and still has no blob:. Changing it would only matter if media playback
+  is revisited, which would additionally need a decoder or an external player -- the
+  custom-scheme limitation is only half the problem.
+- Lightbox: #lightbox must use `#lightbox:not([hidden]) { display: flex }`. An
+  unconditional `display: none` makes clearing the `hidden` attribute a no-op and the
+  overlay can never open.
+- FIXTURES: images are real 320x240 PNGs built with stdlib zlib/struct. Each is a
+  small landscape scene (sky gradient, sun, two mountain ridges, ground) whose palette
+  and geometry both derive from the message index, so any two are instantly
+  distinguishable and it is obvious whether a photo actually rendered. An earlier
+  flat-hue-plus-stripes design read as a logo and made that judgement hard.
+  Voice notes are real 8-bit PCM WAVs (stdlib wave, pitch encodes the index).
+  Video remains an ftyp stub -- unplayable anyway under the limitation above.
 - Release verification procedure and its recorded result: docs/release-verification.md

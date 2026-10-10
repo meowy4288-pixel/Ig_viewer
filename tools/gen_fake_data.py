@@ -132,38 +132,99 @@ def _png_chunk(tag, data):
             + zlib.crc32(tag + data).to_bytes(4, "big"))
 
 
-def make_png(seed_int, size=96):
-    """A real, viewable RGB PNG, built with stdlib only.
+def make_png(seed_int, size=(320, 240)):
+    """A real, viewable RGB PNG that looks like a photo thumbnail, built with stdlib
+    only (zlib + struct).
 
-    Each image is visually distinct so a human can confirm that indexing and the
-    igmedia: protocol served the *right* file: the hue is derived from the message
-    index, and a binary stripe pattern along the top encodes that index.
+    Deliberately *photographic-looking* rather than an abstract swatch: earlier
+    fixtures were a flat hue plus a binary stripe pattern, which read as a logo
+    rather than a photo and made it hard to tell whether anything had rendered.
+    Each image is a small landscape scene -- sky gradient, sun, two mountain ridges
+    and ground -- with the palette and the geometry both derived from the message
+    index, so any two images are immediately distinguishable.
     """
-    hue = (seed_int * 47) % 360
-    r, g, b = _hsv_to_rgb(hue, 0.72, 0.92)
+    w, h = size
+    rnd = _SeededRng(seed_int)
+
+    # Palette: hue rotates with the index, so neighbouring photos differ strongly.
+    sky_top = _hsv_to_rgb((seed_int * 53) % 360, 0.55, 0.95)
+    sky_bot = _hsv_to_rgb(((seed_int * 53) + 28) % 360, 0.45, 0.72)
+    sun_col = _hsv_to_rgb(((seed_int * 53) + 180) % 360, 0.35, 1.0)
+    ridge_far = _hsv_to_rgb(((seed_int * 53) + 200) % 360, 0.40, 0.55)
+    ridge_near = _hsv_to_rgb(((seed_int * 53) + 215) % 360, 0.55, 0.35)
+    ground = _hsv_to_rgb(((seed_int * 53) + 90) % 360, 0.35, 0.30)
+
+    sun_x = 30 + rnd.below(w - 60)
+    sun_y = 24 + rnd.below(max(2, h // 3))
+    sun_r = 10 + rnd.below(9)
+
+    horizon = int(h * (0.55 + 0.12 * rnd.unit()))
+    far = [rnd.unit() for _ in range(9)]
+    near = [rnd.unit() for _ in range(7)]
+
+    def ridge_height(u, amps, base):
+        # piecewise-linear ridge silhouette
+        seg = u * (len(amps) - 1)
+        i = int(seg)
+        f = seg - i
+        a = amps[i]
+        b = amps[min(i + 1, len(amps) - 1)]
+        return int(base + (a + (b - a) * f) * (h * 0.22))
+
     rows = bytearray()
-    for y in range(size):
-        rows.append(0)  # filter type 0 (None) for this scanline
-        for x in range(size):
-            # Dark border
-            if x < 2 or y < 2 or x >= size - 2 or y >= size - 2:
-                rows += bytes((16, 16, 20))
-                continue
-            # Binary stripes across the top 12 rows encode the index.
-            if y < 12:
-                bit = (x // 4) % 16
-                on = (seed_int >> bit) & 1
-                rows += bytes((245, 245, 245) if on else (40, 40, 48))
-                continue
-            # Body: hue block with a lighter diagonal so it is not a flat square.
-            shade = 1.0 if ((x + y) // 8) % 2 == 0 else 0.82
-            rows += bytes((int(r * shade), int(g * shade), int(b * shade)))
-    ihdr = (size.to_bytes(4, "big") + size.to_bytes(4, "big")
-            + bytes((8, 2, 0, 0, 0)))          # 8-bit, colour type 2 (RGB)
+    for y in range(h):
+        rows.append(0)  # PNG filter type 0 (None)
+        t = y / max(1, horizon - 1)
+        sky = _mix(sky_top, sky_bot, min(1.0, t))
+        for x in range(w):
+            u = x / max(1, w - 1)
+            if y > horizon:
+                row = ground
+            else:
+                row = sky
+                # sun disc with a soft edge
+                dx, dy = x - sun_x, y - sun_y
+                d = (dx * dx + dy * dy) ** 0.5
+                if d <= sun_r:
+                    row = sun_col
+                elif d <= sun_r * 1.6:
+                    row = _mix(sky, sun_col, 0.35 * (1 - (d - sun_r) / (sun_r * 0.6)))
+                # far ridge
+                if y >= ridge_height(u, far, horizon - h * 0.26):
+                    row = ridge_far
+                # near ridge (drawn over the far one)
+                if y >= ridge_height(u, near, horizon - h * 0.13):
+                    row = ridge_near
+            rows += bytes(row)
+    ihdr = (w.to_bytes(4, "big") + h.to_bytes(4, "big") + bytes((8, 2, 0, 0, 0)))
     return (b"\x89PNG\r\n\x1a\n"
             + _png_chunk(b"IHDR", ihdr)
             + _png_chunk(b"IDAT", zlib.compress(bytes(rows), 9))
             + _png_chunk(b"IEND", b""))
+
+
+class _SeededRng:
+    """Tiny deterministic PRNG so image content depends only on the message index."""
+    __slots__ = ("state",)
+
+    def __init__(self, seed):
+        self.state = (seed * 2654435761 + 1013904223) & 0xFFFFFFFF
+
+    def next(self):
+        self.state = (self.state * 1664525 + 1013904223) & 0xFFFFFFFF
+        return self.state
+
+    def unit(self):
+        return (self.next() >> 8) / float(1 << 24)
+
+    def below(self, n):
+        return self.next() % max(1, n)
+
+
+def _mix(a, b, t):
+    return (int(a[0] + (b[0] - a[0]) * t),
+            int(a[1] + (b[1] - a[1]) * t),
+            int(a[2] + (b[2] - a[2]) * t))
 
 
 def _hsv_to_rgb(h, s, v):
