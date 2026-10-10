@@ -121,14 +121,49 @@ export function closeLightbox(): void {
   if (box) box.hidden = true;
 }
 
-/** Render one message bubble. */
-export function renderMessage(m: UiMessage, me: string): HTMLElement {
+/** Avatar for a thread row in the sidebar. */
+export function avatarChip(name: string): HTMLElement {
+  return avatar(name);
+}
+
+/** Initials for the avatar chip: at most two letters, taken from the first two words. */
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return (parts[0][0] ?? "?").toUpperCase();
+  return ((parts[0][0] ?? "") + (parts[1][0] ?? "")).toUpperCase();
+}
+
+/** Stable per-sender hue so the same person always gets the same avatar colour. */
+function hueFor(name: string): number {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+  return h;
+}
+
+function avatar(name: string): HTMLElement {
+  const a = el("div", "avatar", initials(name));
+  a.style.setProperty("--h", String(hueFor(name)));
+  a.title = name;
+  return a;
+}
+
+/**
+ * Render one message bubble.
+ *
+ * `grouped` marks a message that continues the previous one from the same sender
+ * within a short window: the avatar and name are then suppressed so a run of
+ * messages reads as one block, the way a messaging app shows it.
+ */
+export function renderMessage(m: UiMessage, me: string, grouped = false): HTMLElement {
   const mine = me !== "" && m.sender === me;
-  const row = el("div", mine ? "row me" : "row them");
+  const row = el("div", (mine ? "row me" : "row them") + (grouped ? " grouped" : ""));
   row.dataset.messageId = String(m.id);
 
   const bubble = el("div", "bubble");
-  if (!mine) bubble.append(el("div", "who", m.sender));
+  if (!mine && !grouped) {
+    bubble.append(el("div", "who", m.sender));
+  }
 
   if (m.is_unsent) {
     bubble.append(el("div", "dim", "Message unsent"));
@@ -157,6 +192,7 @@ export function renderMessage(m: UiMessage, me: string): HTMLElement {
   time.title = new Date(m.ts_ms).toString();
   bubble.append(time);
 
+  if (!mine) row.append(avatar(m.sender));
   row.append(bubble);
   return row;
 }
@@ -164,9 +200,21 @@ export function renderMessage(m: UiMessage, me: string): HTMLElement {
 /** Render a month's messages with day separators. */
 export function renderMonth(messages: UiMessage[], me: string): DocumentFragment {
   const frag = document.createDocumentFragment();
+  // Consecutive messages from one sender within GROUP_WINDOW are visually grouped.
+  const GROUP_WINDOW_MS = 5 * 60 * 1000;
+  let prev: UiMessage | null = null;
   for (const m of withDayBreaks(messages)) {
-    if (m.dayBreak) frag.append(el("div", "day", dayHeading(m.ts_ms)));
-    frag.append(renderMessage(m, me));
+    if (m.dayBreak) {
+      frag.append(el("div", "day", dayHeading(m.ts_ms)));
+      prev = null;
+      continue;
+    }
+    const grouped =
+      prev !== null &&
+      prev.sender === m.sender &&
+      m.ts_ms - prev.ts_ms < GROUP_WINDOW_MS;
+    frag.append(renderMessage(m, me, grouped));
+    prev = m;
   }
   return frag;
 }

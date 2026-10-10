@@ -26,10 +26,15 @@ use std::path::{Component, Path, PathBuf};
 
 use crate::db::restrict;
 
-/// Cap on the total uncompressed size of an archive (2 GiB).
-pub const MAX_TOTAL_BYTES: u64 = 2 * 1024 * 1024 * 1024;
-/// Cap on the number of files extracted.
-pub const MAX_FILES: usize = 200_000;
+/// Cap on total *uncompressed* size (8 GiB).
+///
+/// Measured uncompressed, not on the .zip, because photos and video -- the bulk of
+/// a real export -- barely compress. A 2 GB download of media expands past the old
+/// 2 GiB cap, which rejected genuine exports.
+pub const MAX_TOTAL_BYTES: u64 = 8 * 1024 * 1024 * 1024;
+/// Cap on file count. A large export has one JSON file per message, so this is
+/// generous but still bounds a zip bomb.
+pub const MAX_FILES: usize = 2_000_000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExtractError {
@@ -117,7 +122,7 @@ pub fn extract_zip(zip_path: &Path, dest: &Path) -> Result<(PathBuf, ExtractRepo
         if report.files + report.dirs > MAX_FILES {
             return Err(ExtractError::TooManyEntries);
         }
-        let mut entry = archive.by_index(i).map_err(|_| ExtractError::Io)?;
+        let entry = archive.by_index(i).map_err(|_| ExtractError::Io)?;
         let Some(name) = entry
             .enclosed_name()
             .map(|n| n.to_string_lossy().to_string())
@@ -161,16 +166,27 @@ pub fn extract_zip(zip_path: &Path, dest: &Path) -> Result<(PathBuf, ExtractRepo
             std::fs::create_dir_all(parent).map_err(|_| ExtractError::Io)?;
         }
         let mut out = std::fs::File::create(&target).map_err(|_| ExtractError::Io)?;
-        // Bound the copy by the declared size so a lying header cannot overflow.
-        let mut buf = Vec::new();
-        entry
-            .by_ref()
-            .take(size.max(1))
-            .read_to_end(&mut buf)
-            .map_err(|_| ExtractError::Io)?;
-        std::io::Write::write_all(&mut out, &buf).map_err(|_| ExtractError::Io)?;
-        total += buf.len() as u64;
-        report.bytes += buf.len() as u64;
+        // Stream to disk in fixed chunks. Buffering whole members (read_to_end) would
+        // pull every video into RAM; a multi-GB export would exhaust memory.
+        // The take() bounds the copy by the declared size so a lying header cannot
+        // overflow the budget, and we still verify what actually landed.
+        let mut buf = vec![0u8; 64 * 1024];
+        let mut written: u64 = 0;
+        let mut reader = entry.take(size);
+        loop {
+            let n = reader.read(&mut buf).map_err(|_| ExtractError::Io)?;
+            if n == 0 {
+                break;
+            }
+            if total.saturating_add(written + n as u64) > MAX_TOTAL_BYTES {
+                return Err(ExtractError::TooLarge);
+            }
+            std::io::Write::write_all(&mut out, &buf[..n]).map_err(|_| ExtractError::Io)?;
+            written += n as u64;
+        }
+        out.sync_all().map_err(|_| ExtractError::Io)?;
+        total += written;
+        report.bytes += written;
         report.files += 1;
     }
 

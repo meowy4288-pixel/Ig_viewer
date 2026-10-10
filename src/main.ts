@@ -18,7 +18,7 @@ import {
   monthOfIsoDate,
   tsForIsoDate,
 } from "./logic";
-import { closeLightbox, el, renderMonth, renderSearchHit } from "./ui";
+import { avatarChip, closeLightbox, el, renderMonth, renderSearchHit } from "./ui";
 
 interface ArchiveState {
   id: string;
@@ -298,15 +298,36 @@ function renderThreadList(): void {
   const list = $("#list");
   list.replaceChildren();
   for (const t of filterThreads(state.threads, $<HTMLInputElement>("#filter").value)) {
-    const b = el("button", "chat");
+    const b = el("button", "thread");
     b.type = "button";
-    b.append(el("b", "", t.title));
-    b.append(el("small", "", `${t.message_count} messages`));
-    if (t.key === state.threadKey) b.classList.add("on");
+    b.append(avatarChip(t.title));
+    const body = el("div", "body");
+    body.append(el("div", "t", t.title));
+    body.append(el("div", "s", `${t.message_count} message${t.message_count === 1 ? "" : "s"}`));
+    b.append(body);
+    if (t.key === state.threadKey) {
+      b.classList.add("sel");
+      b.setAttribute("aria-current", "true");
+    }
     b.addEventListener("click", () => void openThread(t.key));
     list.append(b);
   }
   $<HTMLInputElement>("#filter").disabled = state.threads.length === 0;
+  if (state.threads.length === 0) {
+    const q = $<HTMLInputElement>("#filter").value.trim();
+    const e = el("div", "empty");
+    e.append(el("div", "glyph", "\uD83D\uDCAC"));
+    e.append(
+      el(
+        "div",
+        "",
+        q
+          ? `No chats match \u201C${q}\u201D.`
+          : "No chats indexed yet. Open an export folder or a .zip to begin.",
+      ),
+    );
+    list.append(e);
+  }
 }
 
 async function openThread(key: string): Promise<void> {
@@ -529,7 +550,7 @@ function wire(): void {
     localStorage.setItem(`igv:me:${state.threadKey}`, v);
     void showMonth(state.monthIndex);
   });
-  $("#tzset").addEventListener("click", () => void changeTimezone());
+  $("#tzset").addEventListener("click", () => openSettings(true));
   // Click anywhere on the overlay to dismiss; Escape works too.
   $("#lightbox").addEventListener("click", () => closeLightbox());
   window.addEventListener("keydown", (e) => {
@@ -538,8 +559,9 @@ function wire(): void {
 }
 
 async function changeTimezone(): Promise<void> {
-  const raw = $<HTMLInputElement>("#tzinput").value.trim();
-  if (!raw) return;
+  // The timezone lives in Settings; this recomputes month buckets for the open archive.
+  const raw = prefs.timezone.trim();
+  if (!raw || state.id === "") return;
   try {
     await invoke("set_timezone", { archiveId: state.id, timezone: raw });
     await refreshTimezone();

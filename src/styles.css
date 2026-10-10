@@ -16,6 +16,13 @@
 * {
   box-sizing: border-box;
 }
+/* Any rule that sets `display` beats the UA's `[hidden] { display: none }`, which
+   makes hiding silently do nothing -- the settings sheet and toolbar both set a
+   display value, so the close button appeared not to work. Restore the attribute's
+   meaning globally. */
+[hidden] {
+  display: none !important;
+}
 html,
 body {
   height: 100%;
@@ -416,4 +423,239 @@ input {
 }
 button:active {
   transform: translateY(1px);
+}
+
+/* ================================================================ app shell */
+/* A denser, more deliberate spacing scale so the UI reads as an application
+   rather than a form with a message list bolted on. */
+:root {
+  --gap: 12px;
+  --radius: 14px;
+  --sidebar-w: 300px;
+}
+
+#side {
+  width: var(--sidebar-w);
+  min-width: 220px;
+  max-width: 460px;
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+#side header {
+  padding: var(--gap);
+  border-bottom: 1px solid var(--line);
+}
+#list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+#main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+#msgs {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 18px var(--gap) 28px;
+}
+
+/* ---------------------------------------------------------- thread rows */
+.thread {
+  padding: 10px var(--gap);
+  border-bottom: 1px solid transparent;
+  cursor: pointer;
+  transition: background-color 110ms ease;
+}
+.thread:hover {
+  background: var(--panel);
+}
+.thread.sel {
+  background: color-mix(in srgb, var(--me) 18%, transparent);
+  box-shadow: inset 3px 0 0 var(--me);
+}
+.thread .t {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.thread .s {
+  color: var(--dim);
+  font-size: 13px;
+  margin-top: 2px;
+}
+.avatar {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  /* HSL keeps all generated avatar colours the same lightness, so the relative
+     luminance stays even instead of random hues going muddy or glaring. */
+  background: hsl(var(--h, 210) 45% 30%);
+  color: hsl(var(--h, 210) 80% 92%);
+  align-self: flex-end;
+}
+html.light .avatar {
+  background: hsl(var(--h, 210) 60% 86%);
+  color: hsl(var(--h, 210) 70% 22%);
+}
+
+/* ------------------------------------------------------------- bubbles */
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  margin-bottom: 3px;
+}
+.row.me {
+  justify-content: flex-end;
+}
+.row.grouped {
+  margin-top: 0;
+}
+.row.grouped .avatar {
+  visibility: hidden;
+  height: 0;
+  min-height: 0;
+}
+.bubble {
+  background: var(--them);
+  border-radius: var(--radius);
+  padding: 9px 13px;
+  max-width: min(560px, 72%);
+  position: relative;
+  overflow-wrap: anywhere;
+}
+.row.me .bubble {
+  background: var(--me);
+  color: #fff;
+}
+/* Tail only on the first bubble of a group, so runs read as one block. */
+.row:not(.grouped):not(.me) .bubble {
+  border-bottom-left-radius: 5px;
+}
+.row:not(.grouped).me .bubble {
+  border-bottom-right-radius: 5px;
+}
+.row:not(.grouped).me .bubble::after,
+.row:not(.grouped):not(.me) .bubble::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  width: 0;
+  height: 0;
+  border: 6px solid transparent;
+}
+.row:not(.grouped).me .bubble::after {
+  right: -11px;
+  border-left-color: var(--me);
+  border-bottom: 0;
+}
+.row:not(.grouped):not(.me) .bubble::after {
+  left: -11px;
+  border-right-color: var(--them);
+  border-bottom: 0;
+}
+.bubble .who {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+.bubble .time {
+  font-size: 11px;
+  opacity: 0.65;
+  margin-top: 3px;
+  text-align: right;
+}
+.bubble .react {
+  font-size: 13px;
+  margin-top: 4px;
+  opacity: 0.9;
+}
+/* Timestamps on "mine" bubbles must stay legible against the accent fill. */
+.row.me .bubble .dim {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* -------------------------------------------------------- day separators */
+.day {
+  text-align: center;
+  color: var(--dim);
+  font-size: 12px;
+  margin: 18px 0 10px;
+  position: relative;
+}
+.day::before,
+.day::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: calc(50% - 60px);
+  height: 1px;
+  background: var(--line);
+}
+.day::before {
+  left: 0;
+}
+.day::after {
+  right: 0;
+}
+
+/* --------------------------------------------------------- empty states */
+.empty {
+  max-width: 340px;
+  margin: 12vh auto;
+  text-align: center;
+  color: var(--dim);
+  line-height: 1.6;
+}
+.empty .glyph {
+  font-size: 34px;
+  opacity: 0.4;
+  margin-bottom: 10px;
+}
+
+/* ------------------------------------------------------------- toolbar */
+#toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px var(--gap);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+  z-index: 4;
+}
+#toolbar .sp {
+  flex: 1;
+}
+
+.thread {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  color: inherit;
+}
+.thread .body {
+  min-width: 0;
+  flex: 1;
 }
