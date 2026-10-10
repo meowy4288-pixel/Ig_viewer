@@ -739,6 +739,7 @@ fn allow_dev_server(_url: &tauri::Url) -> bool {
 pub fn run() {
     tauri::Builder::default()
         .register_asynchronous_uri_scheme_protocol("igmedia", igmedia_handler)
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             app_info,
             pick_export_folder,

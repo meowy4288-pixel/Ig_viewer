@@ -665,10 +665,7 @@ html.light .avatar {
 /* Hide only the native pickers, which are stubbed on Android. The path field and
    Index button stay: with storage access granted, naming a path manually is the
    import route. */
-html.no-native-picker #pick,
-html.no-native-picker #pickzip {
-  display: none;
-}
+/* Both pickers now work on Android via the dialog plugin, so nothing is hidden. */
 /* Hidden by default, shown only on Android. Must not use the `hidden` attribute:
    the global [hidden] rule is !important and would win over this. */
 /* Android is read-only for now: the APK ships a sample archive, and importing a

@@ -118,9 +118,10 @@ function loadPrefs(): Prefs {
 function applyPrefs(p: Prefs): void {
   const root = document.documentElement;
   // Android cannot open a native folder dialog yet; offer the push-import instead.
-  const isAndroid = /Android/i.test(navigator.userAgent);
-  document.documentElement.classList.toggle("android", isAndroid);
-  document.documentElement.classList.toggle("no-native-picker", isAndroid);
+  document.documentElement.classList.toggle(
+    "android",
+    /Android/i.test(navigator.userAgent),
+  );
   // Animations are off if the user turned them off *or* the OS asks for reduced
   // motion. The settings toggle shows the effective value.
   const prefersLight = window.matchMedia?.("(prefers-color-scheme: light)").matches ?? false;

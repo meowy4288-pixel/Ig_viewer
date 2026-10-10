@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "mobile",
+  "description": "Android import. Grants ONLY the system file picker, which returns a content:// grant for the single file or folder the user chooses. No broad filesystem access: MANAGE_EXTERNAL_STORAGE is deliberately NOT requested.",
+  "platforms": ["android", "iOS"],
+  "windows": ["main"],
+  "permissions": ["dialog:allow-open", "dialog:allow-message"]
+}
