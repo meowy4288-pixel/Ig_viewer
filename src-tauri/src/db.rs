@@ -157,7 +157,7 @@ pub fn open(dir: &Path, id: &str, export_root: &Path, tz: &str) -> Result<Connec
 }
 
 /// chmod on unix; no-op elsewhere.
-fn restrict(path: &Path, mode: u32) {
+pub(crate) fn restrict(path: &Path, mode: u32) {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

@@ -1,4 +1,8 @@
+/* Native form controls (select popup, checkbox, range, scrollbars) do NOT inherit
+   page colours. Without this they render as light widgets with our light text on
+   top, i.e. invisible. Setting color-scheme makes the UA style them to match. */
 :root {
+  color-scheme: dark;
   --bg: #0e0e10;
   --panel: #17171a;
   --line: #2a2a30;
@@ -241,4 +245,175 @@ a {
   color: var(--text);
   border-radius: 3px;
   padding: 0 2px;
+}
+
+/* ---------------------------------------------------------------- settings */
+/* Theme is driven entirely by CSS custom properties so switching it is a single
+   class flip on <html> with no reflow of the message list. */
+html.light {
+  color-scheme: light;
+  --bg: #f7f7f9;
+  --panel: #ffffff;
+  --line: #dcdce2;
+  --text: #17171a;
+  --dim: #6b6b74;
+  --me: #1a7ae8;
+  --them: #e8e8ee;
+  --hi: #ffd54a66;
+  --warn: #8a5a00;
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
+}
+html.compact .msg {
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+
+.titlerow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+button.icon {
+  padding: 4px 8px;
+  line-height: 1;
+  background: transparent;
+  border-color: transparent;
+}
+button.icon:hover {
+  background: var(--panel);
+  border-color: var(--line);
+}
+
+/* Keyboard focus must stay visible; we only style it, never remove it. */
+:focus-visible {
+  outline: 2px solid var(--me);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------- animation */
+/* All motion is opt-out via [data-motion="off"] and is additionally suppressed for
+   users who ask for reduced motion at the OS level. */
+@media (prefers-reduced-motion: no-preference) {
+  html[data-motion="on"] .msg {
+    animation: rise 180ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  }
+  html[data-motion="on"] #lightbox:not([hidden]) {
+    animation: fade 140ms ease-out both;
+  }
+}
+html[data-motion="off"] * {
+  animation: none !important;
+  transition: none !important;
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Settings sheet: slides up over the sidebar. */
+.sheet {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: grid;
+  place-items: center;
+  z-index: 40;
+}
+.sheet-card {
+  width: min(420px, 92vw);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow, 0 8px 28px rgba(0, 0, 0, 0.4));
+  padding: 14px 16px 16px;
+}
+.sheet-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.opt {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+}
+.opt label {
+  color: var(--dim);
+}
+.opt footer,
+.sheet-card footer {
+  display: block;
+  margin-top: 12px;
+  font-size: 13px;
+}
+.sheet-card footer {
+  grid-column: 1 / -1;
+}
+input[type="range"] {
+  width: 120px;
+  padding: 0;
+  accent-color: var(--me);
+}
+input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--me);
+  cursor: pointer;
+}
+/* The settings controls are wider than the toolbar ones and sit on their own rows. */
+#settings select,
+#settings input[type="text"] {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ---------------------------------------------------------------- layout */
+/* Sticky sidebar header so the search box stays reachable in long chat lists. */
+#side header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg);
+  padding-bottom: 6px;
+}
+#list {
+  scrollbar-width: thin;
+}
+/* Three import buttons in one row overflowed the sidebar and wrapped mid-label.
+   Let them wrap as whole chips instead of breaking inside each button. */
+#side .row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+#side .row button {
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+button,
+select,
+input {
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+button:active {
+  transform: translateY(1px);
 }

@@ -74,6 +74,115 @@ async function boot(): Promise<void> {
   }
 }
 
+
+// ------------------------------------------------------------------ settings
+// Persisted in localStorage: no plugin, no filesystem permission, no network.
+// Unknown keys are ignored and malformed values fall back to the default so a
+// corrupted entry can never leave the UI in an unusable state.
+
+interface Prefs {
+  theme: "dark" | "light" | "system";
+  fontSize: number;
+  density: "cozy" | "compact";
+  motion: boolean;
+  timezone: string;
+}
+
+const DEFAULT_PREFS: Prefs = {
+  theme: "system",
+  fontSize: 15,
+  density: "cozy",
+  motion: true,
+  timezone: "",
+};
+
+function loadPrefs(): Prefs {
+  const base = { ...DEFAULT_PREFS };
+  try {
+    const raw = localStorage.getItem("igv:prefs");
+    if (!raw) return base;
+    const p = JSON.parse(raw) as Partial<Prefs>;
+    if (p.theme === "dark" || p.theme === "light" || p.theme === "system") base.theme = p.theme;
+    if (typeof p.fontSize === "number" && p.fontSize >= 13 && p.fontSize <= 20) {
+      base.fontSize = Math.round(p.fontSize);
+    }
+    if (p.density === "cozy" || p.density === "compact") base.density = p.density;
+    if (typeof p.motion === "boolean") base.motion = p.motion;
+    if (typeof p.timezone === "string" && p.timezone.length <= 64) base.timezone = p.timezone;
+  } catch {
+    /* corrupted prefs: fall back to defaults rather than failing to boot */
+  }
+  return base;
+}
+
+function applyPrefs(p: Prefs): void {
+  const root = document.documentElement;
+  // Animations are off if the user turned them off *or* the OS asks for reduced
+  // motion. The settings toggle shows the effective value.
+  const prefersLight = window.matchMedia?.("(prefers-color-scheme: light)").matches ?? false;
+  const theme = p.theme === "system" ? (prefersLight ? "light" : "dark") : p.theme;
+  root.classList.toggle("light", theme === "light");
+  root.classList.toggle("compact", p.density === "compact");
+  const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  root.dataset.motion = p.motion && !reduced ? "on" : "off";
+  root.style.fontSize = `${p.fontSize}px`;
+}
+
+function savePrefs(): void {
+  localStorage.setItem("igv:prefs", JSON.stringify(prefs));
+  applyPrefs(prefs);
+}
+
+function openSettings(open: boolean): void {
+  const sheet = $<HTMLElement>("#settings");
+  sheet.hidden = !open;
+  if (!open) return;
+  // Reflect current prefs into the controls each time, so the sheet never shows
+  // stale values after a change made elsewhere (e.g. the timezone toolbar).
+  $<HTMLSelectElement>("#set-theme").value = prefs.theme;
+  $<HTMLSelectElement>("#set-density").value = prefs.density;
+  const fs = $<HTMLInputElement>("#set-fs");
+  fs.value = String(prefs.fontSize);
+  $<HTMLOutputElement>("#set-fs-out").textContent = `${prefs.fontSize}px`;
+  // Reflect what is actually applied to <html>, not merely what is stored: if the
+  // two ever diverge (e.g. OS reduced-motion overriding) the control must not lie.
+  $<HTMLInputElement>("#set-motion").checked =
+    document.documentElement.dataset.motion === "on";
+  $<HTMLInputElement>("#set-tz").value = prefs.timezone;
+  $<HTMLSelectElement>("#set-theme").focus();
+}
+
+async function onPickZip(): Promise<void> {
+  status("Waiting for the file picker\u2026");
+  let raw: string | null;
+  try {
+    raw = await invoke<string | null>("pick_export_zip");
+  } catch (err) {
+    status(`Could not open the file picker (${String(err)}).`);
+    return;
+  }
+  if (!raw) {
+    status("File selection cancelled.");
+    return;
+  }
+  status("Extracting zip\u2026");
+  try {
+    const res = JSON.parse(await invoke<string>("extract_export", { zipPath: raw })) as {
+      archive_id: string;
+      export_root: string;
+      files: number;
+      rejected: number;
+    };
+    localStorage.setItem("igv:lastArchive", res.archive_id);
+    await attach(res.archive_id);
+    $<HTMLInputElement>("#root").value = res.export_root;
+    await doIndex();
+    status(`Extracted ${res.files} files${res.rejected ? ` (${res.rejected} unsafe entries skipped)` : ""}.`);
+  } catch (err) {
+    status(`Extraction failed (${String(err)}).`);
+  }
+}
+
 async function onPick(): Promise<void> {
   status("Waiting for the folder picker\u2026");
   let raw: string | null;
@@ -367,6 +476,37 @@ async function doDeleteIndex(): Promise<void> {
 
 function wire(): void {
   $("#pick").addEventListener("click", () => void onPick());
+  $("#pickzip").addEventListener("click", () => void onPickZip());
+  $("#settings-btn").addEventListener("click", () => openSettings(true));
+  $("#settings-close").addEventListener("click", () => openSettings(false));
+  $("#settings").addEventListener("click", (e) => {
+    if (e.target === $("#settings")) openSettings(false);
+  });
+  $<HTMLSelectElement>("#set-theme").addEventListener("change", (e) => {
+    prefs.theme = (e.target as HTMLSelectElement).value as Prefs["theme"];
+    savePrefs();
+  });
+  $<HTMLSelectElement>("#set-density").addEventListener("change", (e) => {
+    prefs.density = (e.target as HTMLSelectElement).value as Prefs["density"];
+    savePrefs();
+  });
+  $<HTMLInputElement>("#set-fs").addEventListener("input", (e) => {
+    prefs.fontSize = Number((e.target as HTMLInputElement).value);
+    $<HTMLOutputElement>("#set-fs-out").textContent = `${prefs.fontSize}px`;
+    savePrefs();
+  });
+  $<HTMLInputElement>("#set-motion").addEventListener("change", (e) => {
+    prefs.motion = (e.target as HTMLInputElement).checked;
+    savePrefs();
+  });
+  $<HTMLInputElement>("#set-tz").addEventListener("change", (e) => {
+    const v = (e.target as HTMLInputElement).value.trim();
+    if (v) {
+      prefs.timezone = v;
+      savePrefs();
+      void changeTimezone();
+    }
+  });
   $("#index").addEventListener("click", () => void doIndex());
   $("#delete").addEventListener("click", () => void doDeleteIndex());
   $("#filter").addEventListener("input", () => renderThreadList());
@@ -409,6 +549,9 @@ async function changeTimezone(): Promise<void> {
     status(`Could not set timezone: ${String(err)}`);
   }
 }
+
+const prefs = loadPrefs();
+applyPrefs(prefs);
 
 try {
   wire();

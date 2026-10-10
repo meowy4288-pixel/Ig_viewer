@@ -28,6 +28,10 @@ iana-time-zone = "0.1"
 # IANA rules bundled at compile time: no network, no runtime tzdata dependency.
 chrono-tz = "0.10"
 rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "tokio"] }
+# Extracts a user-supplied Instagram .zip export. Defused by construction: every
+# member path is validated against the destination root before anything is written,
+# so a zip-slip entry cannot escape.
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 tempfile = "3"

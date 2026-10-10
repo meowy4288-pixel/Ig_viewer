@@ -8,6 +8,7 @@ pub mod picker;
 pub mod protocol;
 pub mod scan;
 pub mod text;
+pub mod zip;
 
 use std::path::{Path, PathBuf};
 
@@ -58,12 +59,71 @@ fn pick_export_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
     ))
 }
 
-/// Ingest an already-picked root into an existing archive.
+/// Pick an Instagram `.zip` export. Returns the chosen path; the webview only ever
+/// sees it long enough to hand straight back to `extract_export`.
 #[tauri::command]
+fn pick_export_zip(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let picked = rfd::FileDialog::new()
+        .set_title("Select your Instagram .zip export")
+        .add_filter("Instagram export", &["zip"])
+        .pick_file();
+    let Some(path) = picked else {
+        return Ok(None);
+    };
+    let _ = &app;
+    Ok(path.into_os_string().into_string().ok())
+}
+
+/// Unpack a user-supplied Instagram `.zip` into this archive's cache and return the
+/// extracted root, ready to pass to `index_archive`.
+///
+/// Nothing is written inside the user's own export: extraction happens in the app
+/// data dir. Zip-slip members, symlink entries, zip bombs and absurd file counts are
+/// refused (see `zip` module).
+#[tauri::command]
+fn extract_export(
+    app: tauri::AppHandle,
+    zip_path: String,
+    archive_id: Option<String>,
+) -> Result<String, String> {
+    let dir = archives_dir(&app)?;
+    let archive_id = match archive_id.as_deref().filter(|id| !id.is_empty()) {
+        Some(id) => {
+            db::validate_id(id).map_err(|_| "malformed-archive-id".to_string())?;
+            id.to_string()
+        }
+        None => new_archive_id(),
+    };
+    let src = PathBuf::from(&zip_path);
+    if !src.is_file() {
+        return Err("zip-not-found".to_string());
+    }
+    let dest = dir.join(&archive_id).join("export-src");
+    let (root, report) = zip::extract_zip(&src, &dest).map_err(|e| e.code().to_string())?;
+    log::warn!(
+        "extracted archive: files={} dirs={} bytes={} rejected={}",
+        report.files,
+        report.dirs,
+        report.bytes,
+        report.rejected.len()
+    );
+    Ok(serde_json::json!({
+        "archive_id": archive_id,
+        "export_root": root,
+        "files": report.files,
+        "bytes": report.bytes,
+        "rejected": report.rejected.len(),
+    })
+    .to_string())
+}
+
+/// Ingest an already-picked root into an existing archive.
+///
 /// `archive_id` is optional: an empty/absent id means "this is a new archive", and
 /// the id that was minted is returned in the summary. That is what makes the
 /// "paste a path and index it" flow work without the native folder picker, which is
 /// the only other place an id is created.
+#[tauri::command]
 fn index_archive(
     app: tauri::AppHandle,
     archive_id: Option<String>,
@@ -540,6 +600,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             app_info,
             pick_export_folder,
+            pick_export_zip,
+            extract_export,
             index_archive,
             list_threads,
             get_thread,

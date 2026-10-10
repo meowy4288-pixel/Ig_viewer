@@ -9,9 +9,13 @@
   <body>
     <aside id="side">
       <header>
-        <b id="title">IG Chat Archive Viewer</b>
+        <div class="titlerow">
+          <b id="title">IG Chat Archive Viewer</b>
+          <button id="settings-btn" class="icon" type="button" title="Settings" aria-label="Settings">&#9881;</button>
+        </div>
         <div class="row">
-          <button id="pick" type="button">Choose export folder&hellip;</button>
+          <button id="pick" type="button">Open folder&hellip;</button>
+          <button id="pickzip" type="button">Open .zip&hellip;</button>
           <button id="delete" type="button" hidden>Delete index</button>
         </div>
         <input id="root" type="text" placeholder="…or paste the export folder path" />
@@ -48,6 +52,46 @@
     </main>
 
     <div id="lightbox" hidden><img id="lightbox-img" alt="" /></div>
+
+    <div id="settings" class="sheet" hidden>
+      <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <header>
+          <b id="settings-title">Settings</b>
+          <button id="settings-close" class="icon" type="button" aria-label="Close settings">&#10005;</button>
+        </header>
+        <div class="opt">
+          <label for="set-theme">Theme</label>
+          <select id="set-theme">
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+            <option value="system">Follow system</option>
+          </select>
+        </div>
+        <div class="opt">
+          <label for="set-fs">Text size</label>
+          <input id="set-fs" type="range" min="13" max="20" step="1" />
+          <output id="set-fs-out"></output>
+        </div>
+        <div class="opt">
+          <label for="set-density">Row density</label>
+          <select id="set-density">
+            <option value="cozy">Cozy</option>
+            <option value="compact">Compact</option>
+          </select>
+        </div>
+        <div class="opt">
+          <label for="set-motion">Animations</label>
+          <input id="set-motion" type="checkbox" />
+        </div>
+        <div class="opt">
+          <label for="set-tz">Default timezone</label>
+          <input id="set-tz" type="text" placeholder="Europe/Warsaw" size="18" />
+        </div>
+        <footer class="dim">
+          Settings are stored locally in this app. No network, no accounts, no telemetry.
+        </footer>
+      </div>
+    </div>
 
     <script type="module" src="./main.js"></script>
   </body>
