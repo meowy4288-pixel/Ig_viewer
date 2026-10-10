@@ -503,6 +503,50 @@ pub fn timezone(conn: &Connection) -> Option<String> {
     meta(conn, "timezone")
 }
 
+/// One search hit: which message, who sent it, when, and a snippet around the match.
+#[derive(Debug, Clone)]
+pub struct SearchHit {
+    pub id: i64,
+    pub ts_ms: i64,
+    pub sender: String,
+    /// Snippet with FTS5 `<b>` markers around the matched terms.
+    pub snippet: String,
+}
+
+/// Full-text search returning sender + snippet, chronological, capped.
+///
+/// `snippet()` highlights matches with the column's own term list, so a
+/// multi-word query highlights every term that actually matched. Messages with empty
+/// content (media-only or unsent) are skipped rather than returned blank.
+pub fn search(conn: &Connection, query: &str, limit: i64) -> Result<Vec<SearchHit>, String> {
+    if query.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut st = conn
+        .prepare(
+            "SELECT m.id, m.ts_ms, m.sender,
+                    snippet(messages_fts, 0, '[', ']', '\u{2026}', 12)
+             FROM messages_fts f
+             JOIN messages m ON m.id = f.rowid
+             WHERE messages_fts MATCH ?1 AND m.content IS NOT NULL AND m.content <> ''
+             ORDER BY m.ts_ms ASC LIMIT ?2",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = st
+        .query_map(rusqlite::params![query, limit], |r| {
+            Ok(SearchHit {
+                id: r.get(0)?,
+                ts_ms: r.get(1)?,
+                sender: r.get(2)?,
+                snippet: r.get::<_, Option<String>>(3)?.unwrap_or_default(),
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(rows)
+}
+
 /// Test/diagnostic helper: does an archive exist?
 pub fn exists(dir: &Path, id: &str) -> bool {
     validate_id(id).is_ok() && db_path(dir, id).exists()

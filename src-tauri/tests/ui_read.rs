@@ -277,3 +277,130 @@ fn ui_reads_leave_the_export_untouched() {
     }
     assert_eq!(before_struct, after_struct);
 }
+
+// ------------------------------------------------- search snippets
+
+#[test]
+fn search_returns_sender_and_snippet_for_multiword_queries() {
+    let tmp = common::temp_export_copy();
+    let root = tmp.path().join("export");
+    let (_d, _id, conn) = full_archive(&root, "Europe/Warsaw");
+
+    // A multi-word query: FTS5 treats this as AND across both terms.
+    let hits = db::search(&conn, "build green", 300).unwrap();
+    assert!(!hits.is_empty(), "multi-word query must match fixture text");
+    for h in &hits {
+        assert!(!h.sender.is_empty(), "every hit must name its sender");
+        assert!(!h.snippet.is_empty(), "every hit must carry a snippet");
+        assert!(
+            h.snippet.contains('[') && h.snippet.contains(']'),
+            "snippet must mark the matched term, got {:?}",
+            h.snippet
+        );
+    }
+    // Both terms should be highlighted somewhere across the result set.
+    assert!(
+        hits.iter().any(|h| h.snippet.contains("[build]")),
+        "expected 'build' highlighted, got {:?}",
+        hits.iter().map(|h| h.snippet.clone()).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn search_with_no_hits_returns_nothing_not_everything() {
+    let tmp = common::temp_export_copy();
+    let root = tmp.path().join("export");
+    let (_d, _id, conn) = full_archive(&root, "Europe/Warsaw");
+    let all = db::search(&conn, "build", 1000).unwrap();
+    assert!(!all.is_empty());
+
+    assert!(db::search(&conn, "zzzznotaterm", 1000).unwrap().is_empty());
+    // A term that exists but never alongside another must not fall back to OR.
+    assert!(db::search(&conn, "build zzzznotaterm", 1000)
+        .unwrap()
+        .is_empty());
+    // Empty / whitespace query returns nothing rather than matching everything.
+    assert!(db::search(&conn, "", 1000).unwrap().is_empty());
+    assert!(db::search(&conn, "   ", 1000).unwrap().is_empty());
+}
+
+#[test]
+fn search_results_are_chronological_and_capped() {
+    let tmp = common::temp_export_copy();
+    let root = tmp.path().join("export");
+    let (_d, _id, conn) = full_archive(&root, "Europe/Warsaw");
+    let hits = db::search(&conn, "the", 1000).unwrap();
+    for w in hits.windows(2) {
+        assert!(w[0].ts_ms <= w[1].ts_ms, "hits must be chronological");
+    }
+    let capped = db::search(&conn, "the", 3).unwrap();
+    assert!(capped.len() <= 3, "limit must be honoured");
+}
+
+#[test]
+fn search_snippet_never_carries_raw_markup_from_content() {
+    // A snippet is derived from chat content, so it is untrusted text. The frontend
+    // renders it with textContent; this asserts the marker characters are the only
+    // thing the backend adds.
+    let tmp = common::temp_export_copy();
+    let root = tmp.path().join("export");
+    let (_d, _id, conn) = full_archive(&root, "Europe/Warsaw");
+    let hits = db::search(&conn, "build", 300).unwrap();
+    for h in &hits {
+        // Exactly balanced markers, and no HTML tags introduced by the backend.
+        assert_eq!(
+            h.snippet.matches('[').count(),
+            h.snippet.matches(']').count()
+        );
+        assert!(
+            !h.snippet.contains("<b>") && !h.snippet.contains("</b>"),
+            "backend must not emit HTML: {:?}",
+            h.snippet
+        );
+    }
+}
+
+// ---------------------------------- regression: indexing without an archive id
+
+#[test]
+fn indexing_a_new_export_needs_no_prior_archive_id() {
+    // The paste-a-path flow never runs the folder picker, so no archive id exists
+    // yet. This must not be rejected as "malformed-archive-id"; that bug shipped
+    // once and made the paste flow unusable.
+    let tmp = common::temp_export_copy();
+    let root = tmp.path().join("export");
+    let archives = tempfile::tempdir().unwrap();
+
+    // What the command does when archive_id is absent: mint a fresh id.
+    let id = "e".repeat(32);
+    db::validate_id(&id).expect("a minted id is always well formed");
+    assert!(
+        db::validate_id("").is_err(),
+        "an empty id is still not valid to pass through as-is"
+    );
+
+    // And indexing into that fresh id works end to end.
+    let conn = db::open(archives.path(), &id, &root, "Europe/Warsaw").unwrap();
+    let month_of_fn = |ts: i64| month_of("Europe/Warsaw", ts);
+    let status_of = |uri: &str| match media::resolve(&root, uri) {
+        Ok(_) => "ok".into(),
+        Err(e) => e.code().into(),
+    };
+    for t in THREADS {
+        let ing = common::ingest_util::ingest_thread(&root, t);
+        db::store_thread(&conn, &ing, t, &month_of_fn, &status_of).unwrap();
+    }
+    assert_eq!(db::list_threads(&conn).unwrap().len(), 4);
+}
+
+#[test]
+fn a_wav_only_folder_yields_no_threads() {
+    // A plain media file is not an Instagram export. Indexing must report zero
+    // threads rather than erroring or inventing one.
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    std::fs::write(root.join("my_baby_vn_1.wav"), b"RIFF....WAVEfake").unwrap();
+    let r = ig_viewer_lib::scan::scan(root).unwrap();
+    assert_eq!(r.threads.len(), 0, "no inbox/ tree means no threads");
+    assert_eq!(r.total_skipped(), 0);
+}

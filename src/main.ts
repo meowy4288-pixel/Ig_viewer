@@ -18,7 +18,7 @@ import {
   monthOfIsoDate,
   tsForIsoDate,
 } from "./logic";
-import { el, renderMonth } from "./ui";
+import { el, renderMonth, renderSearchHit } from "./ui";
 
 interface ArchiveState {
   id: string;
@@ -126,20 +126,33 @@ async function refreshTimezone(): Promise<void> {
 
 async function doIndex(): Promise<void> {
   const root = $<HTMLInputElement>("#root").value.trim();
+  if (root === "") {
+    status("Type the export folder path first, or use Choose export folder.");
+    return;
+  }
   status("Indexing\u2026");
   try {
+    // An empty archiveId tells Rust to mint a new archive, which is what the
+    // paste-a-path flow needs: no picker ran, so there is no id yet.
     const raw = await invoke<string>("index_archive", {
       archiveId: state.id,
       exportRoot: root,
       timezone: null,
     });
     const summary = JSON.parse(raw) as {
+      archive_id: string;
       threads: number;
       messages: number;
       skipped_files: number;
       parsed_files: number;
       complete: boolean;
     };
+    if (summary.archive_id && summary.archive_id !== state.id) {
+      state.id = summary.archive_id;
+      localStorage.setItem("igv:lastArchive", state.id);
+      $("#toolbar").hidden = false;
+      $("#delete").hidden = false;
+    }
     if (summary.complete) {
       status(`Indexed ${summary.messages} messages across ${summary.threads} chats.`);
     } else {
@@ -299,14 +312,15 @@ async function runSearch(query: string): Promise<void> {
   }
   try {
     const raw = await invoke<string>("search_messages", { archiveId: state.id, query: q });
-    const data = JSON.parse(raw) as { hits: { id: number; ts_ms: number }[] };
+    const data = JSON.parse(raw) as {
+      hits: { id: number; ts_ms: number; sender: string; snippet: string }[];
+    };
     box.replaceChildren();
     if (data.hits.length === 0) {
       box.append(el("div", "dim", "No matches"));
     }
     for (const h of data.hits) {
-      const row = el("div");
-      row.append(el("small", "", new Date(h.ts_ms).toLocaleString()));
+      const row = renderSearchHit(h.sender, h.snippet, h.ts_ms);
       row.addEventListener("click", () => void jumpToTs(h.ts_ms));
       box.append(row);
     }

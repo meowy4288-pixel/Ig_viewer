@@ -60,13 +60,24 @@ fn pick_export_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
 
 /// Ingest an already-picked root into an existing archive.
 #[tauri::command]
+/// `archive_id` is optional: an empty/absent id means "this is a new archive", and
+/// the id that was minted is returned in the summary. That is what makes the
+/// "paste a path and index it" flow work without the native folder picker, which is
+/// the only other place an id is created.
 fn index_archive(
     app: tauri::AppHandle,
-    archive_id: String,
+    archive_id: Option<String>,
     export_root: String,
     timezone: Option<String>,
 ) -> Result<String, String> {
     let dir = archives_dir(&app)?;
+    let archive_id = match archive_id.as_deref().filter(|id| !id.is_empty()) {
+        Some(id) => {
+            db::validate_id(id).map_err(|_| "malformed-archive-id".to_string())?;
+            id.to_string()
+        }
+        None => new_archive_id(),
+    };
     let root = PathBuf::from(&export_root);
     let (tz, fell_back) = timezone.map(|t| (t, false)).unwrap_or_else(system_tz);
 
@@ -327,23 +338,18 @@ fn search_messages(
     archive_id: String,
     query: String,
 ) -> Result<String, String> {
-    let dir = archives_dir(&app)?;
-    let conn = db::open(&dir, &archive_id, Path::new("."), "UTC")?;
-    let mut st = conn
-        .prepare(
-            "SELECT m.id, m.ts_ms FROM messages_fts f
-             JOIN messages m ON m.id = f.rowid
-             WHERE messages_fts MATCH ?1 ORDER BY m.ts_ms ASC LIMIT 300",
-        )
-        .map_err(|e| e.to_string())?;
-    let hits: Vec<(i64, i64)> = st
-        .query_map([&query], |r| Ok((r.get(0)?, r.get(1)?)))
-        .map_err(|e| e.to_string())?
-        .collect::<Result<_, _>>()
-        .map_err(|e| e.to_string())?;
+    let conn = open_conn(&app, &archive_id)?;
+    let hits = db::search(&conn, &query, 300)?;
     let rows: Vec<_> = hits
         .iter()
-        .map(|(i, t)| serde_json::json!({ "id": i, "ts_ms": t }))
+        .map(|h| {
+            serde_json::json!({
+                "id": h.id,
+                "ts_ms": h.ts_ms,
+                "sender": h.sender,
+                "snippet": h.snippet,
+            })
+        })
         .collect();
     Ok(serde_json::json!({ "hits": rows }).to_string())
 }

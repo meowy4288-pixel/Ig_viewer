@@ -50,3 +50,44 @@ Hard rules:
   (ts_ms ASC, seq DESC) is re-asserted there so a UI regression fails a test.
 - An index that skipped any files must say so in the UI; never claim a complete
   import.
+- Media range requests are single-range only (bytes=a-b, bytes=a-, bytes=-n). A
+  multi-range header returns 400 rather than a partial multipart response.
+- igmedia: is registered as a Tauri "local" origin, so anything loaded under that
+  scheme could in principle reach IPC. on_navigation therefore returns false for
+  igmedia:, so the webview can never navigate to it: it is only ever an <img>,
+  <video> or <audio> src.
+- KNOWN LIMITATION: thread_participants() rebuilds the "I am..." list from the
+  distinct senders in the messages table rather than from the JSON `participants`
+  array. Someone who never posted in a thread will not appear. The participants
+  field was not persisted at ingest; re-ingesting is not worth it.
+- Search snippets come from FTS5 snippet() with [ and ] as highlight markers (chosen
+  so the marker can never be mistaken for markup). The snippet is untrusted chat
+  content and is rendered with textContent into a <mark> element created in ui.ts.
+- KNOWN LIMITATION (WebKitGTK): <audio>/<video> CANNOT play over a custom URI
+  scheme. Images work (they use WebKit's resource loader, which knows custom
+  schemes) but media is handed to GStreamer, whose uridecodebin has no URL handler
+  for igmedia: -- WebKit Bug 146351, and Wails #4412 shows the identical failure.
+  The igmedia protocol itself serves media correctly (200/206, right MIME and
+  bytes), so this is a platform limitation, not an app bug. Fixing it needs either
+  blob: object URLs fed over IPC, or a loopback HTTP server -- both require a CSP
+  change and were NOT taken.
+- PACKAGING (deliberate): the .deb declares Debian/Ubuntu dependency names
+  (libwebkit2gtk-4.1-0, libgtk-3-0). On Fedora those libraries are named
+  webkit2gtk4.1 and gtk3, so dpkg leaves the package in state iU even though
+  everything needed is installed. Workaround: sudo dpkg --remove
+  ig-chat-archive-viewer, then run /usr/bin/ig-viewer. tauri.conf.json is
+  deliberately NOT edited to special-case Fedora.
+- PACKAGING (deliberate): AppImage remains in bundle.targets, but building it
+  needs a one-time network fetch of AppRun + linuxdeploy from tauri-apps
+  binary-releases. The .deb is the offline-buildable, offline-verified artifact.
+- LOOSE MEDIA FILES ARE UNSUPPORTED: only media referenced from an indexed
+  message_N.json is playable. A standalone audio file (e.g. a lone .wav dropped in
+  a folder) has no message row, therefore no media id, therefore nothing to serve.
+  This is intentional: importing loose files would mean copying data into the
+  archive or exposing filesystem paths to the webview, both of which are worse.
+- FIXTURES: images are real 96x96 PNGs (stdlib zlib/struct, distinct hue + binary
+  stripe pattern per message) and voice notes are real 8-bit PCM WAVs (stdlib wave,
+  pitch encodes the index) so indexing and serving can be checked by eye and ear.
+  Video remains an ftyp stub: producing a decodable MP4 is out of proportion, and
+  the protocol path is identical for audio and video.
+- Release verification procedure and its recorded result: docs/release-verification.md

@@ -16,6 +16,7 @@ import {
   isSafeMediaUrl,
   isVideoKind,
   splitLinks,
+  splitSnippet,
   withDayBreaks,
 } from "./logic";
 
@@ -148,4 +149,32 @@ export function renderMonth(messages: UiMessage[], me: string): DocumentFragment
     frag.append(renderMessage(m, me));
   }
   return frag;
+}
+
+/**
+ * Render one search result: sender, snippet, timestamp.
+ *
+ * The snippet is chat content, so every run goes in with textContent and the
+ * highlighted runs are wrapped in a `mark` element created here. Never innerHTML.
+ */
+export function renderSearchHit(sender: string, snippet: string, tsMs: number): HTMLElement {
+  const row = el("div", "hit");
+  row.append(el("small", "", `${sender} \u00b7 ${new Date(tsMs).toLocaleString()}`));
+
+  const body = el("div", "snip");
+  if (snippet === "") {
+    body.textContent = "(no text)";
+  } else {
+    for (const run of splitSnippet(snippet)) {
+      if (run.hit) {
+        const m = document.createElement("mark");
+        m.textContent = run.text;
+        body.append(m);
+      } else {
+        body.append(document.createTextNode(run.text));
+      }
+    }
+  }
+  row.append(body);
+  return row;
 }

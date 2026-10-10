@@ -24,9 +24,13 @@ import argparse
 import hashlib
 import json
 import random
+import io
+import math
 import shutil
 import sys
 import tempfile
+import wave
+import zlib
 from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -122,18 +126,99 @@ class Message:
         return mojibake(val)
 
 
-def stub_bytes(name, kind):
-    """Deterministic synthetic media. Not valid playable media, on purpose: these
-    fixtures exercise byte-exact streaming and MIME handling, not playback."""
+def _png_chunk(tag, data):
+    """One PNG chunk: length, type, payload, CRC32."""
+    return (len(data).to_bytes(4, "big") + tag + data
+            + zlib.crc32(tag + data).to_bytes(4, "big"))
+
+
+def make_png(seed_int, size=96):
+    """A real, viewable RGB PNG, built with stdlib only.
+
+    Each image is visually distinct so a human can confirm that indexing and the
+    igmedia: protocol served the *right* file: the hue is derived from the message
+    index, and a binary stripe pattern along the top encodes that index.
+    """
+    hue = (seed_int * 47) % 360
+    r, g, b = _hsv_to_rgb(hue, 0.72, 0.92)
+    rows = bytearray()
+    for y in range(size):
+        rows.append(0)  # filter type 0 (None) for this scanline
+        for x in range(size):
+            # Dark border
+            if x < 2 or y < 2 or x >= size - 2 or y >= size - 2:
+                rows += bytes((16, 16, 20))
+                continue
+            # Binary stripes across the top 12 rows encode the index.
+            if y < 12:
+                bit = (x // 4) % 16
+                on = (seed_int >> bit) & 1
+                rows += bytes((245, 245, 245) if on else (40, 40, 48))
+                continue
+            # Body: hue block with a lighter diagonal so it is not a flat square.
+            shade = 1.0 if ((x + y) // 8) % 2 == 0 else 0.82
+            rows += bytes((int(r * shade), int(g * shade), int(b * shade)))
+    ihdr = (size.to_bytes(4, "big") + size.to_bytes(4, "big")
+            + bytes((8, 2, 0, 0, 0)))          # 8-bit, colour type 2 (RGB)
+    return (b"\x89PNG\r\n\x1a\n"
+            + _png_chunk(b"IHDR", ihdr)
+            + _png_chunk(b"IDAT", zlib.compress(bytes(rows), 9))
+            + _png_chunk(b"IEND", b""))
+
+
+def _hsv_to_rgb(h, s, v):
+    """h in degrees, s/v in 0..1 -> (r, g, b) in 0..255."""
+    c = v * s
+    x = c * (1 - abs((h / 60.0) % 2 - 1))
+    m = v - c
+    table = [(c, x, 0), (x, c, 0), (0, c, x), (0, x, c), (x, 0, c), (c, 0, x)]
+    r, g, b = table[int(h // 60) % 6]
+    return int((r + m) * 255), int((g + m) * 255), int((b + m) * 255)
+
+
+def make_wav(seed_int, seconds=0.35, rate=8000):
+    """A real, playable mono 8-bit PCM WAV: a short tone whose pitch encodes the
+    index, so different voice notes are audibly different.
+
+    Uses the stdlib `wave` module only, and writes to an in-memory buffer so the
+    generator stays free of temp-file ordering effects.
+    """
+    freq = 220 + (seed_int * 55) % 660          # 220..880 Hz
+    n = int(rate * seconds)
+    frames = bytearray()
+    for i in range(n):
+        # Fade in/out so it does not click.
+        env = min(1.0, i / 200.0, (n - i) / 200.0)
+        val = int(128 + 100 * env * math.sin(2 * math.pi * freq * i / rate))
+        frames.append(max(0, min(255, val)))
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(1)
+        w.setframerate(rate)
+        w.writeframes(bytes(frames))
+    return buf.getvalue()
+
+
+def stub_bytes(name, kind, seed_int=0):
+    """Deterministic synthetic media.
+
+    Images and voice notes are REAL and playable so a human can confirm indexing and
+    the igmedia: protocol end to end. Video stays an `ftyp` stub: producing a
+    genuinely decodable MP4 is out of proportion to what it would prove here, and the
+    protocol path is identical for audio and video.
+    """
     digest = hashlib.sha256(name.encode("utf-8")).digest()
     if kind == "png":
-        # 1x1 transparent PNG, literal bytes.
-        return bytes.fromhex(
-            "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"
-            "890000000a49444154789c6300010000050001"
-            "0d0a2db40000000049454e44ae426082")
-    if kind in ("mp4", "m4a"):
-        return b"\x00\x00\x00\x18ftyp" + kind.encode("ascii") + b" \x00\x00\x00\x00" + digest[:32]
+        return make_png(seed_int)
+    if kind == "wav":
+        return make_wav(seed_int)
+    if kind == "mp4":
+        return b"\x00\x00\x00\x18ftypmp42 \x00\x00\x00\x00" + digest[:32]
+    if kind == "m4a":
+        # A voice note: a real WAV payload behind an .m4a name would be a lie about
+        # the container, so voice notes are written as .wav and indexed as audio_files.
+        return make_wav(seed_int)
     if kind == "svg":
         # Deliberately hostile content for M4's MIME allowlist.
         return (b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>')
@@ -179,7 +264,7 @@ def build_timeline(rng):
             name = f"video_{idx:04d}.mp4"
             kw["media"] = {"videos": [media_uri(key, "videos", name)]}
         elif idx % 29 == 0:
-            name = f"voice_{idx:04d}.m4a"
+            name = f"voice_{idx:04d}.wav"
             kw["media"] = {"audio_files": [media_uri(key, "audio", name)]}
         elif idx == 40:
             # referenced on disk
@@ -210,7 +295,7 @@ def build_timeline(rng):
             # the first, so this is the fixture that catches that bug class.
             kw["media"] = {
                 "photos": [media_uri(key, "photos", f"multi_photo_{idx}.png")],
-                "audio_files": [media_uri(key, "audio", f"multi_voice_{idx}.m4a")],
+                "audio_files": [media_uri(key, "audio", f"multi_voice_{idx}.wav")],
                 "videos": [media_uri(key, "videos", f"multi_video_{idx}.mp4")],
             }
         elif idx == 60:
@@ -506,9 +591,12 @@ def write_export(out_root, msgs, files_by_thread, tz):
                 written.add(name)
                 path.parent.mkdir(parents=True, exist_ok=True)
                 ext = name.rsplit(".", 1)[-1]
-                kind = {"png": "png", "jpg": "png", "mp4": "mp4", "m4a": "m4a",
-                        "svg": "svg", "html": "html"}.get(ext, "bin")
-                path.write_bytes(stub_bytes(name, kind))
+                kind = {"png": "png", "jpg": "png", "mp4": "mp4", "m4a": "wav",
+                        "wav": "wav", "svg": "svg", "html": "html"}.get(ext, "bin")
+                # Seed the content from the file name so the bytes are a pure
+                # function of the name: same fixture, same bytes, every run.
+                seed_int = int(hashlib.sha256(name.encode("utf-8")).hexdigest()[:6], 16)
+                path.write_bytes(stub_bytes(name, kind, seed_int))
     return exp
 
 

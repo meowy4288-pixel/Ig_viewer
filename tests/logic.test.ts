@@ -19,7 +19,9 @@ import {
   isVideoKind,
   isoDate,
   monthOfIsoDate,
+  clampSnippet,
   splitLinks,
+  splitSnippet,
   tsForIsoDate,
   withDayBreaks,
 } from "../dist-test/logic.js";
@@ -95,6 +97,37 @@ test("renderable requires an available igmedia url", () => {
     isRenderable({ media_id: 1, kind: "photos", available: true, url: "https://x/y.png" }),
     false,
   );
+});
+
+test("splitSnippet separates matched terms from plain text", () => {
+  const runs = splitSnippet("the [build] is [green] again");
+  assert.deepEqual(runs, [
+    { text: "the ", hit: false },
+    { text: "build", hit: true },
+    { text: " is ", hit: false },
+    { text: "green", hit: true },
+    { text: " again", hit: false },
+  ]);
+  // Reassembly loses nothing: only the markers are dropped.
+  assert.equal(runs.map((r) => r.text).join(""), "the build is green again");
+});
+
+test("splitSnippet handles edge cases without throwing", () => {
+  assert.deepEqual(splitSnippet(""), [], "empty snippet yields no runs");
+  assert.deepEqual(splitSnippet("[all]"), [{ text: "all", hit: true }]);
+  // Unbalanced marker: nothing is treated as a hit, and no text is lost.
+  const dangling = splitSnippet("dangling [term");
+  assert.equal(dangling.some((r) => r.hit), false);
+  assert.equal(dangling.map((r) => r.text).join(""), "dangling [term");
+  // Markup inside the snippet is just text; it must never become DOM.
+  const nasty = splitSnippet("hi [<script>alert(1)</script>]");
+  assert.equal(nasty.map((r) => r.text).join(""), "hi <script>alert(1)</script>");
+  assert.ok(nasty.some((r) => r.hit && r.text.includes("<script>")));
+});
+
+test("clampSnippet only shortens long snippets", () => {
+  assert.equal(clampSnippet("short", 20), "short");
+  assert.ok(clampSnippet("x".repeat(50), 10).length <= 11);
 });
 
 test("isoDate round trip", () => {

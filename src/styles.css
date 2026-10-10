@@ -203,3 +203,17 @@ a {
   margin: 4px 0;
   display: block;
 }
+#results .hit {
+  cursor: pointer;
+}
+#results .snip {
+  margin-top: 2px;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+#results mark {
+  background: var(--hi);
+  color: var(--text);
+  border-radius: 3px;
+  padding: 0 2px;
+}

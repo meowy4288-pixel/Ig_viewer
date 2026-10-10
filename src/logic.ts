@@ -167,6 +167,41 @@ export function firstIndexAtOrAfter(messages: { ts_ms: number }[], tsMs: number)
   return Math.min(lo, messages.length - 1);
 }
 
+/**
+ * Split an FTS5 snippet into plain and highlighted runs.
+ *
+ * The backend wraps matched terms in `[` and `]` (chosen instead of `<b>` so the
+ * marker can never be confused with markup). The text is still untrusted chat
+ * content, so the caller inserts every run with textContent and only wraps the
+ * highlighted runs in an element it creates itself.
+ */
+export function splitSnippet(snippet: string): { text: string; hit: boolean }[] {
+  const out: { text: string; hit: boolean }[] = [];
+  let rest = snippet;
+  while (rest.length > 0) {
+    const open = rest.indexOf("[");
+    if (open < 0) {
+      out.push({ text: rest, hit: false });
+      break;
+    }
+    if (open > 0) out.push({ text: rest.slice(0, open), hit: false });
+    const close = rest.indexOf("]", open + 1);
+    if (close < 0) {
+      // Unbalanced marker: treat the remainder as plain text rather than guessing.
+      out.push({ text: rest.slice(open), hit: false });
+      break;
+    }
+    out.push({ text: rest.slice(open + 1, close), hit: true });
+    rest = rest.slice(close + 1);
+  }
+  return out;
+}
+
+/** Trim a snippet for display without cutting mid-marker. */
+export function clampSnippet(snippet: string, max: number): string {
+  return snippet.length <= max ? snippet : `${snippet.slice(0, max)}\u2026`;
+}
+
 /** Case-insensitive filter over thread titles and keys. */
 export function filterThreads(threads: ThreadSummary[], query: string): ThreadSummary[] {
   const q = query.trim().toLowerCase();
