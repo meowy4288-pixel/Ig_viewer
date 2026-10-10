@@ -187,6 +187,21 @@ async function onPickZip(): Promise<void> {
   }
 }
 
+// Android ships a fake export inside the APK so the app is usable on a device
+// with no import step. Copy it out and index it the first time we run.
+async function seedOnFirstRun(): Promise<void> {
+  if (!/Android/i.test(navigator.userAgent)) return;
+  try {
+    const root = await invoke<string | null>("seed_demo_archive");
+    if (root) {
+      await doIndex(root);
+      status("Loaded the bundled sample archive.");
+    }
+  } catch (err) {
+    status(`Sample archive unavailable: ${String(err)}`);
+  }
+}
+
 async function onPickAppDir(): Promise<void> {
   status("Looking for a pushed .zip or export folder\u2026");
   try {
@@ -528,6 +543,7 @@ function wire(): void {
   $("#pick").addEventListener("click", () => void onPick());
   $("#pickzip").addEventListener("click", () => void onPickZip());
   $("#picksd").addEventListener("click", () => void onPickAppDir());
+  void seedOnFirstRun();
   $("#settings-btn").addEventListener("click", () => openSettings(true));
   $("#settings-close").addEventListener("click", () => openSettings(false));
   $("#settings").addEventListener("click", (e) => {

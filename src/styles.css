@@ -670,9 +670,9 @@ html.no-native-picker #index {
 }
 /* Hidden by default, shown only on Android. Must not use the `hidden` attribute:
    the global [hidden] rule is !important and would win over this. */
+/* Android is read-only for now: the APK ships a sample archive, and importing a
+   user export needs SAF, which is not wired up. Hide every import affordance
+   rather than offering buttons that cannot work. */
 #picksd {
   display: none;
-}
-html.android #picksd {
-  display: inline-block;
 }

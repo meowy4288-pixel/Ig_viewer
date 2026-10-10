@@ -67,6 +67,64 @@ fn pick_export_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
     ))
 }
 
+/// Copy the bundled fake export out of the APK assets on first run.
+///
+/// The Android APK ships a fake export under `assets/seed-export` so the app is
+/// usable on a device with no import step. On first run it is copied into app
+/// storage, which is the only writable location, and then indexed normally.
+///
+/// Only ever seeds when there are no archives yet, so a real archive is never
+/// displaced. Returns None on desktop and when the seed is absent.
+#[tauri::command]
+fn seed_demo_archive(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let dir = archives_dir(&app)?;
+    let has_existing = std::fs::read_dir(&dir)
+        .map(|mut rd| rd.next().is_some())
+        .unwrap_or(false);
+    if has_existing {
+        return Ok(None);
+    }
+
+    let dest = dir.join("seed");
+    if dest.exists() {
+        std::fs::remove_dir_all(&dest).map_err(|_| "seed-clear".to_string())?;
+    }
+
+    // assets/seed-export lives inside the APK; copy it out into app storage.
+    let assets = app
+        .path()
+        .resource_dir()
+        .map_err(|_| "no-resource-dir".to_string())?;
+    let src = assets.join("seed-export");
+    if !src.is_dir() {
+        return Ok(None);
+    }
+    copy_tree(&src, &dest)?;
+    db::restrict(&dest, 0o700);
+
+    let root = if dest.join("your_instagram_activity").is_dir() {
+        dest.join("your_instagram_activity")
+    } else {
+        dest
+    };
+    Ok(Some(root.to_string_lossy().to_string()))
+}
+
+/// Recursively copy a directory tree.
+fn copy_tree(src: &Path, dst: &Path) -> Result<(), String> {
+    std::fs::create_dir_all(dst).map_err(|_| "mkdir".to_string())?;
+    for e in std::fs::read_dir(src).map_err(|_| "read-src".to_string())? {
+        let e = e.map_err(|_| "read-entry".to_string())?;
+        let to = dst.join(e.file_name());
+        if e.path().is_dir() {
+            copy_tree(&e.path(), &to)?;
+        } else {
+            std::fs::copy(e.path(), &to).map_err(|_| "copy-file".to_string())?;
+        }
+    }
+    Ok(())
+}
+
 /// Import from Android's app-specific external files directory.
 ///
 /// This is the escape hatch that makes the APK testable without the Storage Access
@@ -686,6 +744,7 @@ pub fn run() {
             pick_export_folder,
             pick_export_zip,
             import_from_app_dir,
+            seed_demo_archive,
             extract_export,
             index_archive,
             list_threads,
