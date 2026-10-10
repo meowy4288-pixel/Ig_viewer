@@ -107,3 +107,19 @@ Hard rules:
   Voice notes are real 8-bit PCM WAVs (stdlib wave, pitch encodes the index).
   Video remains an ftyp stub -- unplayable anyway under the limitation above.
 - Release verification procedure and its recorded result: docs/release-verification.md
+- ZIP IMPORT: `extract_export` unpacks a user-supplied `.zip` into the archive's own
+  cache (`<appdata>/<archive_id>/export-src`), never into the user's export folder.
+  Zip-slip members, symlink entries, zip bombs and absurd file counts are refused;
+  backslash-containing member names are rejected because they are inert on Linux but
+  would escape where '\' is a separator. Caps are 8 GiB UNCOMPRESSED and 2M files --
+  the cap is uncompressed because photos and video barely compress, so a ~2 GB
+  download of media expands well past its own size. Members stream to disk in 64 KiB
+  chunks; never buffer a whole member (videos do not fit in RAM).
+- `[hidden]` IS OVERRIDDEN BY ANY CSS RULE THAT SETS `display`. A stylesheet now has a
+  global `[hidden] { display: none !important; }` for this reason. Adding a `display`
+  to a rule for an element toggled via the `hidden` attribute silently breaks hiding.
+- SETTINGS live in localStorage, not on disk and not via a plugin. Theme, text size,
+  row density, animations and the default timezone. The animations toggle shows the
+  EFFECTIVE applied state (prefs AND prefers-reduced-motion), not just the stored
+  pref, so it cannot disagree with what is actually running.
+- DESKTOP BUILD: verified 92 Rust tests, 14 TS tests, clippy and fmt clean, tsc clean.
