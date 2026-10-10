@@ -4,6 +4,7 @@ use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 pub mod db;
 pub mod ingest;
 pub mod media;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod picker;
 pub mod protocol;
 pub mod scan;
@@ -12,6 +13,7 @@ pub mod zip;
 
 use std::path::{Path, PathBuf};
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use picker::{FolderPicker, NativeFolderPicker};
 
 /// Archives dir: `<app_data_dir>/archives`. One DB per archive.
@@ -41,6 +43,12 @@ fn app_info() -> String {
 }
 
 /// Pick an export folder. Native dialog via rfd, so no capability is needed.
+///
+/// rfd has no Android backend (it covers macOS, Windows, wasm and *nix only), so on
+/// Android this reports `picker-unavailable` rather than failing to compile. Android
+/// folder access needs the Storage Access Framework, which yields a `content://` URI
+/// rather than a path -- see the notes in `scan.rs`.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 fn pick_export_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
     let picker = NativeFolderPicker;
@@ -59,8 +67,23 @@ fn pick_export_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
     ))
 }
 
+/// Android stand-in: no rfd backend exists, and SAF is not wired up yet.
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+fn pick_export_folder(_app: tauri::AppHandle) -> Result<Option<String>, String> {
+    Err("picker-unavailable".to_string())
+}
+
+/// Android stand-in, see `pick_export_folder` above.
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+fn pick_export_zip(_app: tauri::AppHandle) -> Result<Option<String>, String> {
+    Err("picker-unavailable".to_string())
+}
+
 /// Pick an Instagram `.zip` export. Returns the chosen path; the webview only ever
 /// sees it long enough to hand straight back to `extract_export`.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 fn pick_export_zip(app: tauri::AppHandle) -> Result<Option<String>, String> {
     let picked = rfd::FileDialog::new()
