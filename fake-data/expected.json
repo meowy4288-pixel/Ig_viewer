@@ -3647,6 +3647,52 @@
         }
       ],
       "tie_pairs": []
+    },
+    {
+      "assertions": {
+        "dropped": [],
+        "within_file_dupes_kept": [],
+        "missing_media": [],
+        "traversal_rejected": [],
+        "bare_filename_media": [],
+        "hostile_media": [],
+        "calendar_fixtures": []
+      },
+      "key": "chatgpt_3310",
+      "title": "ChatGPT",
+      "participants": [
+        "ChatGPT",
+        "Kai Lindqvist"
+      ],
+      "file_count": 0,
+      "raw_count": 0,
+      "message_count": 0,
+      "months": [],
+      "order": [],
+      "tie_pairs": []
+    },
+    {
+      "assertions": {
+        "dropped": [],
+        "within_file_dupes_kept": [],
+        "missing_media": [],
+        "traversal_rejected": [],
+        "bare_filename_media": [],
+        "hostile_media": [],
+        "calendar_fixtures": []
+      },
+      "key": "deepseek_6642",
+      "title": "DeepSeek",
+      "participants": [
+        "DeepSeek",
+        "Kai Lindqvist"
+      ],
+      "file_count": 0,
+      "raw_count": 0,
+      "message_count": 0,
+      "months": [],
+      "order": [],
+      "tie_pairs": []
     }
   ]
 }

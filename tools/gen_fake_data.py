@@ -79,6 +79,10 @@ THREADS = [
                                    "bot/worker", "Dev Team", "Ravi Menon"], 60, 4),
     ("sam_lee_9012", "Sam Lee", ["Sam Lee", "Kai Lindqvist"], 25, 2),
     ("ana_silva_5544", "Ana Silva", ["Ana Silva", "Kai Lindqvist"], 12, 1),
+    # Assistant chats. Kept alongside human threads so timezone grouping, long
+    # sessions and media handling are exercised against an AI-shaped transcript.
+    ("chatgpt_3310", "ChatGPT", ["ChatGPT", "Kai Lindqvist"], 48, 3),
+    ("deepseek_6642", "DeepSeek", ["DeepSeek", "Kai Lindqvist"], 36, 2),
 ]
 
 # Base instant: 2024-01-05T00:00:00Z, so the timeline crosses several months.
