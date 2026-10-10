@@ -117,6 +117,10 @@ function loadPrefs(): Prefs {
 
 function applyPrefs(p: Prefs): void {
   const root = document.documentElement;
+  // Android cannot open a native folder dialog yet; offer the push-import instead.
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  document.documentElement.classList.toggle("android", isAndroid);
+  document.documentElement.classList.toggle("no-native-picker", isAndroid);
   // Animations are off if the user turned them off *or* the OS asks for reduced
   // motion. The settings toggle shows the effective value.
   const prefersLight = window.matchMedia?.("(prefers-color-scheme: light)").matches ?? false;
@@ -183,6 +187,31 @@ async function onPickZip(): Promise<void> {
   }
 }
 
+async function onPickAppDir(): Promise<void> {
+  status("Looking for a pushed .zip or export folder\u2026");
+  try {
+    const res = JSON.parse(await invoke<string>("import_from_app_dir")) as {
+      kind: string;
+      export_root: string;
+      files?: number;
+    };
+    state.id = "";
+    await doIndex(res.export_root);
+    status(
+      res.kind === "zip"
+        ? `Extracted ${res.files} files.`
+        : "Indexing the pushed folder.",
+    );
+  } catch (err) {
+    const e = String(err);
+    status(
+      e.includes("nothing-found")
+        ? "No .zip or your_instagram_activity folder found. Push one with: adb push <path> /sdcard/Android/data/com.ig.viewer.app/files/"
+        : `Import failed (${e}).`,
+    );
+  }
+}
+
 async function onPick(): Promise<void> {
   status("Waiting for the folder picker\u2026");
   let raw: string | null;
@@ -233,8 +262,8 @@ async function refreshTimezone(): Promise<void> {
   }
 }
 
-async function doIndex(): Promise<void> {
-  const root = $<HTMLInputElement>("#root").value.trim();
+async function doIndex(prefilledRoot?: string): Promise<void> {
+  const root = (prefilledRoot ?? $<HTMLInputElement>("#root").value).trim();
   if (root === "") {
     status("Type the export folder path first, or use Choose export folder.");
     return;
@@ -244,7 +273,7 @@ async function doIndex(): Promise<void> {
     // An empty archiveId tells Rust to mint a new archive, which is what the
     // paste-a-path flow needs: no picker ran, so there is no id yet.
     const raw = await invoke<string>("index_archive", {
-      archiveId: state.id,
+      archiveId: prefilledRoot ? null : state.id,
       exportRoot: root,
       timezone: null,
     });
@@ -498,6 +527,7 @@ async function doDeleteIndex(): Promise<void> {
 function wire(): void {
   $("#pick").addEventListener("click", () => void onPick());
   $("#pickzip").addEventListener("click", () => void onPickZip());
+  $("#picksd").addEventListener("click", () => void onPickAppDir());
   $("#settings-btn").addEventListener("click", () => openSettings(true));
   $("#settings-close").addEventListener("click", () => openSettings(false));
   $("#settings").addEventListener("click", (e) => {

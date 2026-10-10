@@ -67,6 +67,67 @@ fn pick_export_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
     ))
 }
 
+/// Import from Android's app-specific external files directory.
+///
+/// This is the escape hatch that makes the APK testable without the Storage Access
+/// Framework. An app may always read/write its own
+/// `/sdcard/Android/data/<pkg>/files` with no runtime permission, so the archive can
+/// be pushed in with `adb push` and imported from here.
+///
+/// It is NOT a general file picker: the caller cannot choose an arbitrary location,
+/// and nothing outside these directories is readable. A real SAF flow will replace
+/// this; until then this is deliberately narrow.
+///
+/// Looks for a single `*.zip` or a single `your_instagram_activity` directory.
+#[tauri::command]
+fn import_from_app_dir(app: tauri::AppHandle) -> Result<String, String> {
+    let external = app
+        .path()
+        .app_data_dir()
+        .map_err(|_| "no-app-data-dir".to_string())?;
+
+    // app_data_dir on Android is .../files (internal); the external variant is the
+    // one reachable by adb. Probe both.
+    let mut candidates = vec![external.clone()];
+    if let Some(ext) = external.to_str().and_then(|s| s.split("/files").next()) {
+        candidates.push(PathBuf::from(ext).join("files"));
+    }
+
+    for root in &candidates {
+        let entries = match std::fs::read_dir(root) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        for e in entries.flatten() {
+            let path = e.path();
+            if path.is_file()
+                && path
+                    .extension()
+                    .is_some_and(|x| x.eq_ignore_ascii_case("zip"))
+            {
+                let dest = archives_dir(&app)?.join("pending-zip");
+                let _ = std::fs::remove_dir_all(&dest);
+                let (root_dir, report) =
+                    zip::extract_zip(&path, &dest).map_err(|e| e.code().to_string())?;
+                return Ok(serde_json::json!({
+                    "kind": "zip",
+                    "export_root": root_dir,
+                    "files": report.files,
+                })
+                .to_string());
+            }
+            if path.is_dir() && path.join("your_instagram_activity").is_dir() {
+                return Ok(serde_json::json!({
+                    "kind": "folder",
+                    "export_root": path.join("your_instagram_activity"),
+                })
+                .to_string());
+            }
+        }
+    }
+    Err("nothing-found-in-app-dir".to_string())
+}
+
 /// Android stand-in: no rfd backend exists, and SAF is not wired up yet.
 #[cfg(any(target_os = "android", target_os = "ios"))]
 #[tauri::command]
@@ -624,6 +685,7 @@ pub fn run() {
             app_info,
             pick_export_folder,
             pick_export_zip,
+            import_from_app_dir,
             extract_export,
             index_archive,
             list_threads,

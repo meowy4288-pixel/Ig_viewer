@@ -659,3 +659,15 @@ html.light .avatar {
   min-width: 0;
   flex: 1;
 }
+
+/* On Android the native pickers return "picker-unavailable", so they are hidden and
+   the push-import button is shown instead. */
+html.no-native-picker #pick,
+html.no-native-picker #pickzip,
+html.no-native-picker #root,
+html.no-native-picker #index {
+  display: none;
+}
+html.android #picksd {
+  display: block;
+}
