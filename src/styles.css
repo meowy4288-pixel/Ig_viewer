@@ -668,6 +668,11 @@ html.no-native-picker #root,
 html.no-native-picker #index {
   display: none;
 }
+/* Hidden by default, shown only on Android. Must not use the `hidden` attribute:
+   the global [hidden] rule is !important and would win over this. */
+#picksd {
+  display: none;
+}
 html.android #picksd {
-  display: block;
+  display: inline-block;
 }
