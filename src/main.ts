@@ -28,6 +28,7 @@ interface ArchiveState {
   id: string;
   threads: ThreadSummary[];
   threadKey: string;
+  threadTitle: string;
   participants: string[];
   months: MonthBucket[];
   monthIndex: number;
@@ -40,6 +41,7 @@ const state: ArchiveState = {
   id: "",
   threads: [],
   threadKey: "",
+  threadTitle: "",
   participants: [],
   months: [],
   monthIndex: 0,
@@ -55,20 +57,19 @@ const $ = <T extends HTMLElement>(sel: string): T => {
 };
 
 function status(text: string): void {
+  // #status lives inside the import screen, which is hidden once an archive is
+  // open, so mirror into the sidebar footer which is always visible.
   $("#status").textContent = text;
+  $("#foot").textContent = text;
 }
 
 function banner(text: string): void {
-  const b = $("#fallback");
-  b.textContent = text;
-  b.hidden = text === "";
+  status(text);
 }
 
 // ------------------------------------------------------------- boot
 
 async function boot(): Promise<void> {
-  $("#title").textContent = "IG Chat Archive Viewer";
-
   // Attach to the last archive if one exists; otherwise wait for a pick.
   const last = localStorage.getItem("igv:lastArchive");
   if (last && /^[0-9a-f]{32}$/.test(last)) {
@@ -90,7 +91,7 @@ function applyPrefs(p: Prefs): void {
   const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
   root.classList.toggle("light", resolveTheme(p.theme, prefersLight) === "light");
   root.classList.toggle("compact", p.density === "compact");
-  root.dataset.motion = motionEnabled(p, reduced) ? "on" : "off";
+  root.dataset.anim = motionEnabled(p, reduced) ? "on" : "off";
   root.style.fontSize = `${p.fontSize}px`;
 }
 
@@ -115,7 +116,6 @@ function openSettings(open: boolean): void {
   $<HTMLSelectElement>("#set-density").value = prefs.density;
   const fs = $<HTMLInputElement>("#set-fs");
   fs.value = String(prefs.fontSize);
-  $<HTMLOutputElement>("#set-fs-out").textContent = `${prefs.fontSize}px`;
   // Reflect what is actually applied to <html>, not merely what is stored: if the
   // two ever diverge (e.g. OS reduced-motion overriding) the control must not lie.
   $<HTMLInputElement>("#set-motion").checked = motionIsOn();
@@ -193,7 +193,7 @@ async function refreshTimezone(): Promise<void> {
       fallback: boolean;
     };
     state.timezone = info.timezone;
-    $("#tz").textContent = `Times shown in ${info.timezone}`;
+    $("#foot").textContent = `Times shown in ${info.timezone}`;
     if (info.fallback) {
       // The UTC fallback must be visible, not just logged.
       banner(
@@ -260,7 +260,15 @@ async function doIndex(prefilledRoot?: string): Promise<void> {
       $("#toolbar").hidden = false;
       $("#delete").hidden = false;
     }
-    if (summary.complete) {
+    if (summary.threads === 0) {
+      // Almost always the wrong folder. Say what was expected rather than
+      // reporting an empty index and leaving the user to guess.
+      status(
+        `No chats found under that path. Expected to find ` +
+          `your_instagram_activity/messages/inbox inside it \u2014 point at the ` +
+          `folder containing your_instagram_activity, or at that folder itself.`,
+      );
+    } else if (summary.complete) {
       status(`Indexed ${summary.messages} messages across ${summary.threads} chats.`);
     } else {
       // Never claim a complete import when files were skipped.
@@ -292,19 +300,48 @@ async function refreshThreads(): Promise<void> {
   }
 }
 
+/** The "Me" control is a button in the new design, so it shows the current pick. */
+function renderMeButton(): void {
+  const b = $<HTMLButtonElement>("#me");
+  b.textContent = state.me === "" ? "I am\u2026" : state.me;
+  b.title = state.me === "" ? "Choose which participant you are" : `You are ${state.me}`;
+}
+
+/** Open the participant chooser overlay. */
+async function chooseMe(): Promise<void> {
+  const box = $<HTMLElement>("#whobtns");
+  box.replaceChildren();
+  for (const who of state.participants) {
+    const b = el("button", who === state.me ? "primary" : "", who);
+    b.dataset.who = who;
+    box.append(b);
+  }
+  $<HTMLElement>("#whopick").hidden = false;
+}
+
+/** "9 Oct 2026" — compact and unambiguous enough for a list row. */
+function shortDate(tsMs: number): string {
+  return new Date(tsMs).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 function renderThreadList(): void {
   const list = $("#list");
   list.replaceChildren();
   for (const t of filterThreads(state.threads, $<HTMLInputElement>("#filter").value)) {
-    const b = el("button", "thread");
+    const b = el("button", "chat");
     b.type = "button";
     b.append(avatarChip(t.title));
-    const body = el("div", "body");
-    body.append(el("div", "t", t.title));
-    body.append(el("div", "s", `${t.message_count} message${t.message_count === 1 ? "" : "s"}`));
-    b.append(body);
+    const meta = el("div", "meta");
+    const title = el("b", "", t.title);
+    title.append(el("span", "", `${t.message_count}`));
+    meta.append(title, el("small", "", shortDate(t.last_ts_ms)));
+    b.append(meta);
     if (t.key === state.threadKey) {
-      b.classList.add("sel");
+      b.classList.add("on");
       b.setAttribute("aria-current", "true");
     }
     b.addEventListener("click", () => void openThread(t.key));
@@ -330,27 +367,16 @@ function renderThreadList(): void {
 
 async function openThread(key: string): Promise<void> {
   state.threadKey = key;
+  state.threadTitle = state.threads.find((t) => t.key === key)?.title ?? "";
   renderThreadList();
   const raw = await invoke<string>("get_thread", { archiveId: state.id, threadKey: key });
   const data = JSON.parse(raw) as { participants: string[]; months: MonthBucket[] };
   state.participants = data.participants;
   state.months = data.months;
 
-  const meSel = $<HTMLSelectElement>("#me");
-  meSel.replaceChildren();
-  const none = document.createElement("option");
-  none.value = "";
-  none.textContent = "I am\u2026";
-  meSel.append(none);
-  for (const p of state.participants) {
-    const o = document.createElement("option");
-    o.value = p;
-    o.textContent = p;
-    meSel.append(o);
-  }
   const saved = localStorage.getItem(`igv:me:${key}`) ?? "";
   state.me = state.participants.includes(saved) ? saved : "";
-  meSel.value = state.me;
+  renderMeButton();
 
   const months = $<HTMLSelectElement>("#months");
   months.replaceChildren();
@@ -387,8 +413,15 @@ async function showMonth(index: number, where: "start" | "end" | "focus" = "star
   const data = JSON.parse(raw) as { messages: UiMessage[] };
   state.messages = inDisplayOrder(data.messages);
 
+  $("#hname").textContent = state.threadTitle;
+  $("#hav").textContent = (state.threadTitle.trim()[0] ?? "?").toUpperCase();
+  $("#hsub").textContent = `${state.messages.length} messages in ${bucket.key}`;
+
   const box = $("#msgs");
-  box.replaceChildren(renderMonth(state.messages, state.me));
+  box.hidden = false;
+  $("#welcome").hidden = true;
+  $("#latestf").hidden = false;
+  box.replaceChildren(renderMonth(state.messages, state.me, state.participants.length > 2));
   if (where === "end") box.scrollTop = box.scrollHeight;
   else box.scrollTop = 0;
   status(`${state.messages.length} messages in ${bucket.key}.`);
@@ -432,10 +465,9 @@ async function jumpToDate(iso: string): Promise<void> {
 
 async function runSearch(query: string): Promise<void> {
   const q = query.trim();
-  const box = $("#results");
+  const box = $("#msgs");
   if (!q) {
-    box.hidden = true;
-    box.replaceChildren();
+    await showMonth(state.monthIndex);
     return;
   }
   try {
@@ -445,7 +477,7 @@ async function runSearch(query: string): Promise<void> {
     };
     box.replaceChildren();
     if (data.hits.length === 0) {
-      box.append(el("div", "dim", "No matches"));
+      box.append(el("div", "empty", "No matches"));
     }
     for (const h of data.hits) {
       const row = renderSearchHit(h.sender, h.snippet, h.ts_ms);
@@ -455,7 +487,6 @@ async function runSearch(query: string): Promise<void> {
     box.hidden = false;
   } catch (err) {
     status(`Search failed: ${String(err)}`);
-    box.hidden = true;
   }
 }
 
@@ -463,10 +494,7 @@ async function jumpToTs(ts: number): Promise<void> {
   const raw = await invoke<string>("month_for_ts", { archiveId: state.id, tsMs: ts });
   const { month } = JSON.parse(raw) as { month: string };
   const idx = state.months.findIndex((m) => m.key === month);
-  if (idx >= 0) {
-    $("#results").hidden = true;
-    await showMonth(idx, "start");
-  }
+  if (idx >= 0) await showMonth(idx, "start");
 }
 
 // ------------------------------------------------------------- delete index
@@ -496,10 +524,37 @@ async function doDeleteIndex(): Promise<void> {
 function wire(): void {
   $("#pick").addEventListener("click", () => void onPick());
   $("#pickzip").addEventListener("click", () => void onPickZip());
-  $("#settings-btn").addEventListener("click", () => openSettings(true));
-  $("#settings-close").addEventListener("click", () => openSettings(false));
-  $("#settings").addEventListener("click", (e) => {
-    if (e.target === $("#settings")) openSettings(false);
+  $("#pick2").addEventListener("click", () => void onPick());
+  $("#pickzip2").addEventListener("click", () => void onPickZip());
+  $("#whobtns").addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest("button");
+    if (!b) return;
+    state.me = b.dataset.who ?? "";
+    localStorage.setItem(`igv:me:${state.threadKey}`, state.me);
+    $<HTMLElement>("#whopick").hidden = true;
+    renderMeButton();
+    void showMonth(state.monthIndex);
+  });
+  $("#latestf").addEventListener("click", () => {
+    const box = $<HTMLElement>("#msgs");
+    box.scrollTo({ top: box.scrollHeight, behavior: "smooth" });
+  });
+  $("#lightbox-close").addEventListener("click", () => closeLightbox());
+  $<HTMLDialogElement>("#lightbox").addEventListener("click", (e) => {
+    // A click on the backdrop (outside the panel) closes.
+    if (e.target === $("#lightbox")) closeLightbox();
+  });
+  $("#settings-btn").addEventListener("click", (e) => {
+    e.stopPropagation();
+    openSettings($("#settings").hidden);
+  });
+  document.addEventListener("click", (e) => {
+    const sheet = $("#settings");
+    const gear = $("#settings-btn");
+    if (sheet.hidden) return;
+    const t = e.target as Node;
+    if (sheet.contains(t) || gear.contains(t)) return;
+    openSettings(false);
   });
   $<HTMLSelectElement>("#set-theme").addEventListener("change", (e) => {
     prefs.theme = (e.target as HTMLSelectElement).value as Prefs["theme"];
@@ -511,8 +566,7 @@ function wire(): void {
   });
   $<HTMLInputElement>("#set-fs").addEventListener("input", (e) => {
     prefs.fontSize = Number((e.target as HTMLInputElement).value);
-    $<HTMLOutputElement>("#set-fs-out").textContent = `${prefs.fontSize}px`;
-    savePrefs();
+      savePrefs();
   });
   $<HTMLInputElement>("#set-motion").addEventListener("change", (e) => {
     prefs.motion = (e.target as HTMLInputElement).checked;
@@ -542,15 +596,7 @@ function wire(): void {
     void jumpToDate((e.target as HTMLInputElement).value),
   );
   $("#q").addEventListener("input", (e) => void runSearch((e.target as HTMLInputElement).value));
-  $("#me").addEventListener("change", (e) => {
-    const v = (e.target as HTMLSelectElement).value;
-    state.me = v;
-    localStorage.setItem(`igv:me:${state.threadKey}`, v);
-    void showMonth(state.monthIndex);
-  });
-  $("#tzset").addEventListener("click", () => openSettings(true));
-  // Click anywhere on the overlay to dismiss; Escape works too.
-  $("#lightbox").addEventListener("click", () => closeLightbox());
+  $("#me").addEventListener("click", () => void chooseMe());
   window.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeLightbox();
   });

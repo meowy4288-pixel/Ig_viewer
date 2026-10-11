@@ -104,11 +104,30 @@ pub fn parse_file_number(name: &str) -> Result<u32, SkipReason> {
         .map_err(|_| SkipReason::FileNumberOverflow)
 }
 
+/// Resolve the inbox, accepting either the export root or the `your_instagram_activity`
+/// folder itself.
+///
+/// Instagram's own instructions tell users to point at the top of the download, but
+/// people just as often select the folder that visibly contains `messages/`. Failing
+/// silently in that case is confusing, so both are accepted and normalised to one.
+///
 /// `<root>/your_instagram_activity/messages/inbox`
 fn inbox_dir(root: &Path) -> PathBuf {
-    root.join("your_instagram_activity")
-        .join("messages")
-        .join("inbox")
+    let inner = root.join("your_instagram_activity").join("messages").join("inbox");
+    if inner.is_dir() {
+        return inner;
+    }
+    // root may already BE the your_instagram_activity folder, or an export whose
+    // folder is named differently.
+    for candidate in [
+        root.join("messages").join("inbox"),
+        root.join("your_instagram_activity").join("messages").join("inbox"),
+    ] {
+        if candidate.is_dir() {
+            return candidate;
+        }
+    }
+    inner
 }
 
 /// True if the path is a symlink. Never follows it.

@@ -105,68 +105,57 @@ export function renderMedia(m: UiMedia): HTMLElement | null {
   return el("div", "dim", `(${m.kind} cannot be previewed)`);
 }
 
-/** Show a photo full-screen. Sets src/textContent only; no markup. */
+/** Show a photo full-screen in the <dialog> overlay. */
 export function openLightbox(img: HTMLImageElement): void {
-  const box = document.getElementById("lightbox");
-  const target = document.getElementById("lightbox-img") as HTMLImageElement | null;
+  const box = document.getElementById("lightbox") as HTMLDialogElement | null;
+  const target = document.getElementById("lightbox-img");
   if (!box || !target) return;
-  target.src = img.src;
-  target.alt = img.alt;
-  box.hidden = false;
+  target.replaceChildren();
+  const full = document.createElement("img");
+  full.src = img.src;
+  full.alt = img.alt;
+  target.append(full);
+  box.showModal();
 }
 
 /** Hide the lightbox. */
 export function closeLightbox(): void {
-  const box = document.getElementById("lightbox");
-  if (box) box.hidden = true;
+  const box = document.getElementById("lightbox") as HTMLDialogElement | null;
+  if (box && box.open) box.close();
 }
 
-/** Avatar for a thread row in the sidebar. */
+/** Arch-shaped avatar used in the sidebar and chat header. */
 export function avatarChip(name: string): HTMLElement {
-  return avatar(name);
+  return el("div", "arch", (name.trim()[0] ?? "?").toUpperCase());
 }
 
-/** Initials for the avatar chip: at most two letters, taken from the first two words. */
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return (parts[0][0] ?? "?").toUpperCase();
-  return ((parts[0][0] ?? "") + (parts[1][0] ?? "")).toUpperCase();
-}
+/** Only this many leading bubbles animate; see .msg.enter in styles.css. */
+const STAGGER_CAP = 12;
 
-/** Stable per-sender hue so the same person always gets the same avatar colour. */
-function hueFor(name: string): number {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
-  return h;
-}
-
-function avatar(name: string): HTMLElement {
-  const a = el("div", "avatar", initials(name));
-  a.style.setProperty("--h", String(hueFor(name)));
-  a.title = name;
-  return a;
-}
-
-/**
- * Render one message bubble.
- *
- * `grouped` marks a message that continues the previous one from the same sender
- * within a short window: the avatar and name are then suppressed so a run of
- * messages reads as one block, the way a messaging app shows it.
- */
-export function renderMessage(m: UiMessage, me: string, grouped = false): HTMLElement {
+export function renderMessage(
+  m: UiMessage,
+  me: string,
+  grouped: boolean,
+  hasNext: boolean,
+  showSender: boolean,
+  index: number,
+): HTMLElement {
   const mine = me !== "" && m.sender === me;
-  const row = el("div", (mine ? "row me" : "row them") + (grouped ? " grouped" : ""));
-  row.dataset.messageId = String(m.id);
+  const cls = ["msg"];
+  if (mine) cls.push("me");
+  if (grouped) cls.push("g-prev");
+  if (hasNext) cls.push("g-next");
+  if (m.is_unsent) cls.push("unsent");
+  if (index < STAGGER_CAP) cls.push("enter");
 
-  const bubble = el("div", "bubble");
-  if (!mine && !grouped) {
-    bubble.append(el("div", "who", m.sender));
-  }
+  const bubble = el("div", cls.join(" "));
+  if (index < STAGGER_CAP) bubble.style.setProperty("--i", String(index));
+  bubble.dataset.messageId = String(m.id);
+
+  if (!mine && !grouped && showSender) bubble.append(el("span", "sender", m.sender));
 
   if (m.is_unsent) {
-    bubble.append(el("div", "dim", "Message unsent"));
+    bubble.append(document.createTextNode("Message unsent"));
   } else if (m.content) {
     appendText(bubble, m.content);
   }
@@ -176,44 +165,57 @@ export function renderMessage(m: UiMessage, me: string, grouped = false): HTMLEl
     if (node) bubble.append(node);
   }
 
-  if (m.call_duration !== null && m.call_duration !== undefined) {
-    bubble.append(el("div", "dim", `Call, ${m.call_duration} s`));
-  }
-
   if (m.reactions.length > 0) {
     const rx = el("div", "react");
-    for (const r of m.reactions) {
-      rx.append(document.createTextNode(`${r.reaction} ${r.actor}  `));
-    }
+    for (const r of m.reactions) rx.append(el("span", "", `${r.reaction} ${r.actor}`));
     bubble.append(rx);
   }
 
-  const time = el("div", "time", clockTime(m.ts_ms));
-  time.title = new Date(m.ts_ms).toString();
-  bubble.append(time);
-
-  if (!mine) row.append(avatar(m.sender));
-  row.append(bubble);
-  return row;
+  // Timestamp only on the last bubble of a run, so a group reads as one block.
+  if (!hasNext) {
+    const time = el("time", "", clockTime(m.ts_ms));
+    time.dateTime = new Date(m.ts_ms).toISOString();
+    time.title = new Date(m.ts_ms).toString();
+    bubble.append(time);
+  }
+  return bubble;
 }
 
-/** Render a month's messages with day separators. */
-export function renderMonth(messages: UiMessage[], me: string): DocumentFragment {
+/** True when a message can take part in sender grouping. */
+function groupable(m: UiMessage): boolean {
+  return !m.is_unsent && m.call_duration == null && m.media.length === 0;
+}
+
+/** Render a month's messages with day separators and sender grouping. */
+export function renderMonth(
+  messages: UiMessage[],
+  me: string,
+  showSenders: boolean,
+): DocumentFragment {
   const frag = document.createDocumentFragment();
-  // Consecutive messages from one sender within GROUP_WINDOW are visually grouped.
+  // Mirrors GROUP_WINDOW_MIN in the design.
   const GROUP_WINDOW_MS = 5 * 60 * 1000;
   let prev: UiMessage | null = null;
-  for (const m of withDayBreaks(messages)) {
+  let index = 0;
+
+  const rows = withDayBreaks(messages);
+  for (let i = 0; i < rows.length; i++) {
+    const m = rows[i] as UiMessage & { dayBreak?: boolean };
     if (m.dayBreak) {
       frag.append(el("div", "day", dayHeading(m.ts_ms)));
       prev = null;
+      index = 0;
       continue;
     }
+    const next = rows[i + 1] as (UiMessage & { dayBreak?: boolean }) | undefined;
+    const joined =
+      next !== undefined && !next.dayBreak && groupable(m) && groupable(next) &&
+      m.sender === next.sender && next.ts_ms - m.ts_ms < GROUP_WINDOW_MS;
     const grouped =
-      prev !== null &&
-      prev.sender === m.sender &&
+      prev !== null && groupable(prev) && groupable(m) && prev.sender === m.sender &&
       m.ts_ms - prev.ts_ms < GROUP_WINDOW_MS;
-    frag.append(renderMessage(m, me, grouped));
+    frag.append(renderMessage(m, me, grouped, joined, showSenders, index));
+    index += 1;
     prev = m;
   }
   return frag;

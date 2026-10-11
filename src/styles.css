@@ -1,293 +1,175 @@
-/* Native form controls (select popup, checkbox, range, scrollbars) do NOT inherit
-   page colours. Without this they render as light widgets with our light text on
-   top, i.e. invisible. Setting color-scheme makes the UA style them to match. */
+/* ============================================================== gothic v4
+   Design source: ig-viewer-gothic-v4.html
+   Fonts are bundled locally (src/fonts -> dist/) because the app is fully
+   offline and CSP is `font-src 'self'`. Both families are OFL 1.1.
+   `font-display: swap` means a missing file degrades to system serif/sans
+   rather than breaking the page.
+   ========================================================================= */
+@font-face {
+  font-family: "Cormorant Garamond";
+  src: url("./fonts/CormorantGaramond-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Cormorant Garamond";
+  src: url("./fonts/CormorantGaramond-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Cormorant Garamond";
+  src: url("./fonts/CormorantGaramond-Italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Alegreya Sans";
+  src: url("./fonts/AlegreyaSans-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Alegreya Sans";
+  src: url("./fonts/AlegreyaSans-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Alegreya Sans";
+  src: url("./fonts/AlegreyaSans-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+
 :root {
   color-scheme: dark;
-  --bg: #0e0e10;
-  --panel: #17171a;
-  --line: #2a2a30;
-  --text: #eee;
-  --dim: #8a8a93;
-  --me: #3797f0;
-  --them: #2a2a2f;
-  --hi: #ffd54a55;
-  --warn: #6b4a00;
+  --crypt: #120d10;
+  --nave: #1a1317;
+  --stone: #2a1f24;
+  --line: #3a2c32;
+  --oxblood: #6e1423;
+  --blood: #a3213a;
+  --gilt: #b89a5e;
+  --gilt-dim: #b89a5e55;
+  --bone: #e6dccb;
+  --ash: #8d8079;
+  --font-display: "Cormorant Garamond", "Palatino Linotype", Georgia, serif;
+  --font-ui: "Alegreya Sans", "Segoe UI", system-ui, sans-serif;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --pad: 9px;
+  --sidebar-w: 320px;
 }
+
+[data-density="compact"] {
+  --pad: 5px;
+}
+
 * {
   box-sizing: border-box;
+  margin: 0;
 }
+
 /* Any rule that sets `display` beats the UA's `[hidden] { display: none }`, which
-   makes hiding silently do nothing -- the settings sheet and toolbar both set a
-   display value, so the close button appeared not to work. Restore the attribute's
-   meaning globally. */
+   makes hiding silently do nothing. Restore the attribute's meaning globally. */
 [hidden] {
   display: none !important;
 }
+
 html,
 body {
   height: 100%;
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font: 15px system-ui, sans-serif;
 }
 body {
-  display: flex;
+  background: var(--crypt);
+  color: var(--bone);
+  font: 15px/1.5 var(--font-ui);
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  overflow: hidden;
 }
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 8px;
+}
+
 button,
-select,
-input {
+input,
+select {
   font: inherit;
-  color: var(--text);
-  background: var(--panel);
+  color: var(--bone);
+  background: var(--nave);
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 6px 10px;
+  padding: 6px 11px;
+  transition: border-color 0.18s, background 0.18s;
 }
 button {
   cursor: pointer;
 }
-button:hover {
-  border-color: #555;
+button:hover,
+select:hover,
+input:hover {
+  border-color: var(--gilt-dim);
 }
-a {
-  color: #9cf;
-  word-break: break-all;
+button:active {
+  transform: translateY(1px);
 }
-#side {
-  width: 320px;
-  border-right: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
+:focus-visible {
+  outline: 2px solid var(--gilt);
+  outline-offset: 1px;
 }
-#side header {
-  padding: 10px;
-  border-bottom: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+input::placeholder {
+  color: var(--ash);
 }
-#side header .row {
-  display: flex;
-  gap: 6px;
+button:disabled,
+option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
-#list {
-  overflow: auto;
-  flex: 1;
+.primary {
+  background: var(--oxblood);
+  border-color: var(--blood);
 }
-#fallback {
-  padding: 8px 10px;
-  background: var(--warn);
-  color: #ffe9a8;
-  font-size: 0.85rem;
+.primary:hover {
+  background: var(--blood);
 }
-.chat {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 10px 12px;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  border-radius: 0;
-  background: none;
-}
-.chat:hover,
-.chat.on {
-  background: var(--panel);
-}
-.chat b {
-  display: block;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.chat small {
-  color: var(--dim);
-}
-#main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-#toolbar {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--line);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-}
-#toolbar .sp {
-  flex: 1;
-}
-#results {
-  position: absolute;
-  right: 10px;
-  top: 54px;
-  width: min(420px, 92vw);
-  max-height: 60vh;
-  overflow: auto;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 4px;
-  z-index: 5;
-}
-#results div {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--line);
-  cursor: pointer;
-}
-#results div:hover {
-  background: #222;
-}
-#results small {
-  color: var(--dim);
-  display: block;
-}
-#msgs {
-  flex: 1;
-  overflow: auto;
-  padding: 10px 12px;
-}
-.day {
-  text-align: center;
-  color: var(--dim);
-  font-size: 0.8rem;
-  margin: 16px 0 6px;
-}
-.row {
-  display: flex;
-  margin: 3px 0;
-}
-.row.me {
-  justify-content: flex-end;
-}
-.bubble {
-  max-width: min(78%, 560px);
-  padding: 7px 11px;
-  border-radius: 16px;
-  background: var(--them);
-  white-space: pre-wrap;
-  word-wrap: break-word;
-}
-.row.me .bubble {
-  background: var(--me);
-}
-.row.flash .bubble {
-  outline: 3px solid var(--hi);
-}
-.who {
-  font-size: 0.7rem;
-  opacity: 0.7;
-}
-.time {
-  font-size: 0.65rem;
-  opacity: 0.6;
-  text-align: right;
-  margin-top: 2px;
-}
-.react {
-  margin-top: 3px;
-  font-size: 0.85rem;
-}
-.dim {
-  opacity: 0.7;
-  font-style: italic;
-}
-.bubble img,
-.bubble video {
-  max-width: 100%;
-  max-height: 420px;
-  border-radius: 10px;
-  display: block;
-  margin: 4px 0;
-}
-/* Photos are clickable: open full-screen to inspect. */
-.bubble img.photo {
-  cursor: zoom-in;
-}
-/* The overlay is only laid out while it is NOT hidden. An unconditional
-   `display: none` here previously meant clearing the `hidden` attribute changed
-   nothing and the lightbox could never open. */
-#lightbox {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.92);
-  display: none;
-  align-items: center;
-  justify-content: center;
-  z-index: 20;
-  cursor: zoom-out;
-}
-#lightbox:not([hidden]) {
-  display: flex;
-}
-#lightbox img {
-  max-width: 96vw;
-  max-height: 96vh;
-  border-radius: 8px;
-}
-.bubble img.sticker {
-  max-width: 130px;
-}
-.bubble audio {
-  width: 240px;
-  max-width: 100%;
-  margin: 4px 0;
-  display: block;
-}
-#results .hit {
-  cursor: pointer;
-}
-#results .snip {
-  margin-top: 2px;
-  font-size: 0.85rem;
-  color: var(--text);
-}
-#results mark {
-  background: var(--hi);
-  color: var(--text);
-  border-radius: 3px;
-  padding: 0 2px;
-}
-
-/* ---------------------------------------------------------------- settings */
-/* Theme is driven entirely by CSS custom properties so switching it is a single
-   class flip on <html> with no reflow of the message list. */
-html.light {
-  color-scheme: light;
-  --bg: #f7f7f9;
-  --panel: #ffffff;
-  --line: #dcdce2;
-  --text: #17171a;
-  --dim: #6b6b74;
-  --me: #1a7ae8;
-  --them: #e8e8ee;
-  --hi: #ffd54a66;
-  --warn: #8a5a00;
-  --shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
-}
-html.compact .msg {
-  padding-top: 3px;
-  padding-bottom: 3px;
-}
-
-.titlerow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-button.icon {
-  padding: 6px 10px;
-  line-height: 1;
+.ghost {
   background: transparent;
   border-color: transparent;
 }
-/* The gear was too small to hit comfortably; give icon buttons a real target. */
+.ghost:hover {
+  background: var(--stone);
+}
+.danger {
+  border-color: var(--blood);
+  color: #e9a3b0;
+}
+
+/* ---------------------------------------------------------------- sidebar */
+#side {
+  background: var(--nave);
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+}
+.side-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 14px 10px;
+}
+.side-top h1 {
+  flex: 1;
+  font: 600 24px/1 var(--font-display);
+  color: var(--gilt);
+}
 #settings-btn {
   font-size: 18px;
   padding: 7px 12px;
@@ -296,509 +178,474 @@ button.icon {
   display: inline-grid;
   place-items: center;
 }
-button.icon:hover {
-  background: var(--panel);
-  border-color: var(--line);
+.search {
+  padding: 0 14px 10px;
+}
+.search input {
+  width: 100%;
+  border-radius: 999px;
+  padding-left: 16px;
+}
+.chats {
+  overflow: auto;
+  padding: 4px 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+.chat {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: var(--pad) 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+  transition: background 0.18s, border-color 0.18s;
+}
+.chat:hover {
+  background: var(--stone);
+}
+.chat.on {
+  background: var(--stone);
+  border-color: var(--gilt-dim);
+}
+.chat .meta {
+  min-width: 0;
+  flex: 1;
+}
+.chat b {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 600;
+}
+.chat b span {
+  font: 400 12px var(--font-ui);
+  color: var(--ash);
+}
+.chat small {
+  color: var(--ash);
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.arch {
+  width: 38px;
+  height: 46px;
+  flex: none;
+  border-radius: 999px 999px 4px 4px;
+  background: var(--oxblood);
+  display: grid;
+  place-items: center;
+  font: 600 18px var(--font-display);
+  border: 1px solid var(--gilt-dim);
+  color: var(--bone);
+}
+.side-foot {
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--ash);
 }
 
-/* Keyboard focus must stay visible; we only style it, never remove it. */
-:focus-visible {
-  outline: 2px solid var(--me);
-  outline-offset: 2px;
+/* -------------------------------------------------------------- popovers */
+.pop {
+  position: absolute;
+  z-index: 5;
+  background: var(--nave);
+  border: 1px solid var(--gilt-dim);
+  border-radius: 12px;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+  box-shadow: 0 12px 40px #000a;
+  animation: rise 0.22s var(--ease);
+}
+.pop h3 {
+  font: 600 19px var(--font-display);
+  color: var(--gilt);
+}
+.pop label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+}
+.pop label select,
+.pop label input[type="text"],
+.pop label input[type="range"] {
+  width: 150px;
+}
+.pop hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+.pop footer {
+  font-size: 12px;
+  color: var(--ash);
+}
+#settings {
+  top: 56px;
+  left: 14px;
+  width: 292px;
 }
 
-/* ---------------------------------------------------------------- animation */
-/* All motion is opt-out via [data-motion="off"] and is additionally suppressed for
-   users who ask for reduced motion at the OS level. */
-@media (prefers-reduced-motion: no-preference) {
-  html[data-motion="on"] .msg {
-    animation: rise 180ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
-  }
-  html[data-motion="on"] #lightbox:not([hidden]) {
-    animation: fade 140ms ease-out both;
+/* ------------------------------------------------------------------ main */
+#main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+}
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--nave);
+}
+.head .arch {
+  width: 32px;
+  height: 38px;
+  font-size: 16px;
+}
+.head .t {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.head b {
+  font: 600 19px/1.1 var(--font-display);
+  display: block;
+}
+.head small {
+  color: var(--ash);
+  font-size: 13px;
+}
+.timebar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.timebar select,
+.timebar input {
+  min-width: 0;
+}
+#months {
+  max-width: 190px;
+}
+#date {
+  width: 150px;
+}
+#q {
+  min-width: 160px;
+}
+.view {
+  flex: 1;
+  overflow: auto;
+  padding: 18px 8% 40px;
+  position: relative;
+}
+.latest {
+  position: absolute;
+  right: 28px;
+  bottom: 22px;
+  z-index: 3;
+  border-radius: 999px;
+  background: var(--oxblood);
+  border-color: var(--blood);
+  box-shadow: 0 6px 20px #000a;
+}
+
+/* ------------------------------------------------- centered state screens */
+.center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  text-align: center;
+  padding: 24px;
+  z-index: 4;
+  background: var(--crypt);
+}
+.center.overlay {
+  background: #120d10e6;
+}
+.sigil {
+  width: 120px;
+  height: 120px;
+  animation: turn 240s linear infinite;
+}
+@keyframes turn {
+  to {
+    transform: rotate(360deg);
   }
 }
-html[data-motion="off"] * {
-  animation: none !important;
-  transition: none !important;
+.center h2 {
+  font: 500 30px var(--font-display);
+}
+.center p {
+  max-width: 46ch;
+  color: var(--ash);
+}
+.import {
+  display: grid;
+  gap: 10px;
+  width: min(420px, 90vw);
+  text-align: left;
+}
+.who {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.bar {
+  height: 4px;
+  background: var(--stone);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.bar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--blood);
+  transition: width 0.3s;
+}
+
+/* -------------------------------------------------------------- messages */
+.day {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 22px 0 14px;
+  color: var(--gilt);
+  font: italic 400 17px var(--font-display);
+}
+.day::before,
+.day::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gilt-dim), transparent);
+}
+.msg {
+  max-width: min(520px, 78%);
+  margin: 10px 0;
+  padding: calc(var(--pad) + 1px) 14px;
+  border: 1px solid var(--line);
+  background: var(--stone);
+  border-radius: 14px 14px 14px 3px;
+  overflow-wrap: anywhere;
+}
+.msg.me {
+  margin-left: auto;
+  background: var(--oxblood);
+  border-color: var(--blood);
+  border-radius: 14px 14px 3px 14px;
+}
+/* Grouping: consecutive messages from one sender tighten and flatten the
+   joining corners so a run reads as a single block. */
+.msg.g-prev {
+  margin-top: 2px;
+}
+.msg.g-prev:not(.me) {
+  border-top-left-radius: 4px;
+}
+.msg.g-prev.me {
+  border-top-right-radius: 4px;
+}
+.msg.g-next:not(.me) {
+  border-bottom-left-radius: 4px;
+}
+.msg.g-next.me {
+  border-bottom-right-radius: 4px;
+}
+/* Only the first ~12 messages animate; beyond that a 40ms step over a 150-message
+   month would take six seconds to settle. */
+.msg.enter {
+  animation: rise 0.4s var(--ease) both;
+  animation-delay: calc(var(--i) * 40ms);
+}
+.msg time {
+  display: block;
+  font-size: 12px;
+  color: var(--ash);
+}
+.msg.me time {
+  color: #d9b9bf;
 }
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
     transform: none;
   }
 }
-@keyframes fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-/* Settings sheet: slides up over the sidebar. */
-.sheet {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  display: grid;
-  place-items: center;
-  z-index: 40;
-}
-.sheet-card {
-  width: min(420px, 92vw);
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  box-shadow: var(--shadow, 0 8px 28px rgba(0, 0, 0, 0.4));
-  padding: 14px 16px 16px;
-}
-.sheet-card header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-.opt {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 10px;
-  align-items: center;
-  padding: 9px 0;
-  border-top: 1px solid var(--line);
-}
-.opt label {
-  color: var(--dim);
-}
-.opt footer,
-.sheet-card footer {
+.sender {
   display: block;
-  margin-top: 12px;
+  font: 700 12px var(--font-ui);
+  color: var(--gilt);
+  margin-bottom: 1px;
+}
+.msg.unsent {
+  background: transparent;
+  border-style: dashed;
+  color: var(--ash);
+  font-style: italic;
+}
+.msg.unsent.me {
+  border-color: var(--blood);
+}
+.react {
+  display: flex;
+  gap: 4px;
+  margin: 4px 0 -2px;
+}
+.react span {
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--crypt);
+  border: 1px solid var(--gilt-dim);
+}
+.sys {
+  display: table;
+  margin: 14px auto;
+  padding: 3px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ash);
   font-size: 13px;
 }
-.sheet-card footer {
-  grid-column: 1 / -1;
+button.img {
+  cursor: zoom-in;
+  transition: border-color 0.18s;
 }
-input[type="range"] {
-  width: 120px;
-  padding: 0;
-  accent-color: var(--me);
+button.img:hover {
+  border-color: var(--gilt);
 }
-input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--me);
-  cursor: pointer;
-}
-/* The settings controls are wider than the toolbar ones and sit on their own rows. */
-#settings select,
-#settings input[type="text"] {
-  background: var(--bg);
-  color: var(--text);
-}
-
-/* ---------------------------------------------------------------- layout */
-/* Sticky sidebar header so the search box stays reachable in long chat lists. */
-#side header {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  background: var(--bg);
-  padding-bottom: 6px;
-}
-#list {
-  scrollbar-width: thin;
-}
-/* Three import buttons in one row overflowed the sidebar and wrapped mid-label.
-   Let them wrap as whole chips instead of breaking inside each button. */
-#side .row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-#side .row button {
-  flex: 1 1 auto;
-  white-space: nowrap;
-}
-button,
-select,
-input {
-  transition: background-color 120ms ease, border-color 120ms ease;
-}
-button:active {
-  transform: translateY(1px);
-}
-
-/* ================================================================ app shell */
-/* A denser, more deliberate spacing scale so the UI reads as an application
-   rather than a form with a message list bolted on. */
-:root {
-  --gap: 12px;
-  --radius: 14px;
-  --sidebar-w: 300px;
-}
-
-#side {
-  width: var(--sidebar-w);
-  min-width: 220px;
-  max-width: 460px;
-  border-right: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-#side header {
-  padding: var(--gap);
-  border-bottom: 1px solid var(--line);
-}
-#list {
-  flex: 1;
-  overflow-y: auto;
-  min-height: 0;
-}
-#main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-}
-#msgs {
-  flex: 1;
-  overflow-y: auto;
-  min-height: 0;
-  padding: 18px var(--gap) 28px;
-}
-
-/* ---------------------------------------------------------- thread rows */
-.thread {
-  padding: 10px var(--gap);
-  border-bottom: 1px solid transparent;
-  cursor: pointer;
-  transition: background-color 110ms ease;
-}
-.thread:hover {
-  background: var(--panel);
-}
-.thread.sel {
-  background: color-mix(in srgb, var(--me) 18%, transparent);
-  box-shadow: inset 3px 0 0 var(--me);
-}
-.thread .t {
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.thread .s {
-  color: var(--dim);
-  font-size: 13px;
-  margin-top: 2px;
-}
-.avatar {
-  width: 34px;
-  height: 34px;
-  min-width: 34px;
-  border-radius: 50%;
+.img {
+  width: 260px;
+  max-width: 100%;
+  aspect-ratio: 4/3;
+  border-radius: 10px;
+  border: 1px solid var(--gilt-dim);
+  background: var(--crypt);
   display: grid;
   place-items: center;
+  color: var(--ash);
   font-size: 13px;
-  font-weight: 600;
-  /* HSL keeps all generated avatar colours the same lightness, so the relative
-     luminance stays even instead of random hues going muddy or glaring. */
-  background: hsl(var(--h, 210) 45% 30%);
-  color: hsl(var(--h, 210) 80% 92%);
-  align-self: flex-end;
+  margin-bottom: 4px;
+  overflow: hidden;
 }
-html.light .avatar {
-  background: hsl(var(--h, 210) 60% 86%);
-  color: hsl(var(--h, 210) 70% 22%);
+.img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
-
-/* ------------------------------------------------------------- bubbles */
-.row {
-  display: flex;
+.voice {
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
-  align-items: flex-end;
-  margin-bottom: 3px;
-}
-.row.me {
-  justify-content: flex-end;
-}
-.row.grouped {
-  margin-top: 0;
-}
-.row.grouped .avatar {
-  visibility: hidden;
-  height: 0;
-  min-height: 0;
-}
-.bubble {
-  background: var(--them);
-  border-radius: var(--radius);
-  padding: 9px 13px;
-  max-width: min(560px, 72%);
-  position: relative;
-  overflow-wrap: anywhere;
-}
-.row.me .bubble {
-  background: var(--me);
-  color: #fff;
-}
-/* Tail only on the first bubble of a group, so runs read as one block. */
-.row:not(.grouped):not(.me) .bubble {
-  border-bottom-left-radius: 5px;
-}
-.row:not(.grouped).me .bubble {
-  border-bottom-right-radius: 5px;
-}
-.row:not(.grouped).me .bubble::after,
-.row:not(.grouped):not(.me) .bubble::after {
-  content: "";
-  position: absolute;
-  bottom: 0;
-  width: 0;
-  height: 0;
-  border: 6px solid transparent;
-}
-.row:not(.grouped).me .bubble::after {
-  right: -11px;
-  border-left-color: var(--me);
-  border-bottom: 0;
-}
-.row:not(.grouped):not(.me) .bubble::after {
-  left: -11px;
-  border-right-color: var(--them);
-  border-bottom: 0;
-}
-.bubble .who {
-  font-weight: 600;
-  font-size: 13px;
-  margin-bottom: 2px;
-}
-.bubble .time {
-  font-size: 11px;
-  opacity: 0.65;
-  margin-top: 3px;
-  text-align: right;
-}
-.bubble .react {
-  font-size: 13px;
-  margin-top: 4px;
-  opacity: 0.9;
-}
-/* Timestamps on "mine" bubbles must stay legible against the accent fill. */
-.row.me .bubble .dim {
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--gilt);
 }
 
-/* -------------------------------------------------------- day separators */
-.day {
-  text-align: center;
-  color: var(--dim);
-  font-size: 12px;
-  margin: 18px 0 10px;
-  position: relative;
-}
-.day::before,
-.day::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  width: calc(50% - 60px);
-  height: 1px;
-  background: var(--line);
-}
-.day::before {
-  left: 0;
-}
-.day::after {
-  right: 0;
-}
-
-/* --------------------------------------------------------- empty states */
-.empty {
-  max-width: 340px;
-  margin: 12vh auto;
-  text-align: center;
-  color: var(--dim);
-  line-height: 1.6;
-}
-.empty .glyph {
-  font-size: 34px;
-  opacity: 0.4;
-  margin-bottom: 10px;
-}
-
-/* ------------------------------------------------------------- toolbar */
-#toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  padding: 8px var(--gap);
-  border-bottom: 1px solid var(--line);
-  background: var(--bg);
-  position: sticky;
-  top: 0;
-  z-index: 4;
-}
-#toolbar .sp {
-  flex: 1;
-}
-
-.thread {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+/* -------------------------------------------------------- search results */
+.hit {
+  display: block;
   width: 100%;
   text-align: left;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  font: inherit;
-  color: inherit;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  background: var(--stone);
 }
-.thread .body {
-  min-width: 0;
-  flex: 1;
+.hit b {
+  font: 600 17px var(--font-display);
+  color: var(--gilt);
 }
-
-/* On Android the native pickers return "picker-unavailable", so they are hidden and
-   the push-import button is shown instead. */
-/* Hide only the native pickers, which are stubbed on Android. The path field and
-   Index button stay: with storage access granted, naming a path manually is the
-   import route. */
-/* Both pickers now work on Android via the dialog plugin, so nothing is hidden. */
-/* Hidden by default, shown only on Android. Must not use the `hidden` attribute:
-   the global [hidden] rule is !important and would win over this. */
-
-
-/* ---------------------------------------------------------------- welcome */
-/* Shown until an archive is loaded. The previous version was one dim sentence
-   floating in a large empty pane, which read as a broken app rather than a
-   starting point. */
-.welcome {
-  max-width: 420px;
-  margin: 0 auto;
-  padding: 8vh 24px 40px;
+.hit small {
+  color: var(--ash);
+  margin-left: 8px;
+}
+.hit p {
+  margin-top: 2px;
+}
+mark {
+  background: var(--oxblood);
+  color: var(--bone);
+  border-radius: 3px;
+  padding: 0 2px;
+}
+.empty {
   text-align: center;
-  animation: rise 260ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  color: var(--ash);
+  padding: 30px 10px;
 }
-html[data-motion="off"] .welcome {
-  animation: none;
+
+/* --------------------------------------------------------------- lightbox */
+dialog {
+  background: var(--nave);
+  color: var(--bone);
+  border: 1px solid var(--gilt-dim);
+  border-radius: 14px;
+  padding: 12px;
+  max-width: 90vw;
+  max-height: 90vh;
+  margin: auto;
 }
-.welcome .mark {
-  width: 56px;
-  height: 56px;
-  margin: 0 auto 20px;
-  border-radius: 16px;
-  background: linear-gradient(145deg, var(--me), color-mix(in srgb, var(--me) 45%, var(--panel)));
-  opacity: 0.9;
+dialog::backdrop {
+  background: #000c;
 }
-.welcome h1 {
-  font-size: 22px;
-  font-weight: 650;
-  margin: 0 0 10px;
-  letter-spacing: -0.01em;
-}
-.welcome .lede {
-  color: var(--dim);
-  line-height: 1.6;
-  margin: 0 0 22px;
-}
-.welcome code {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  padding: 1px 5px;
-  font-size: 0.92em;
-}
-.assurances {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 20px;
+.lbimg {
+  width: min(80vw, 900px);
+  max-height: 84vh;
   display: grid;
-  gap: 8px;
+  place-items: center;
+  color: var(--ash);
+  background: var(--crypt);
+  border-radius: 8px;
+  overflow: hidden;
 }
-.assurances li {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--dim);
-  font-size: 14px;
+.lbimg img {
+  max-width: 100%;
+  max-height: 84vh;
+  display: block;
+  object-fit: contain;
 }
-.assurances li::before {
-  content: "";
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--me);
-  flex: none;
-}
-.tiny {
-  font-size: 13px;
+#lbx {
+  position: absolute;
+  top: 8px;
+  right: 8px;
 }
 
-/* The welcome panel is replaced once messages render. */
-#msgs:not(:empty) .welcome {
-  display: none;
+/* -------------------------------------------------------------- animation */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
 }
-
-/* --------------------------------------------------------------- chrome */
-/* The toolbar carried eight controls, several of them permanently empty before
-   an archive loaded. Denser grouping and a max width keep it from reading as a
-   wall of widgets. */
-#toolbar {
-  gap: 5px;
-  padding: 7px 14px;
-}
-#toolbar select,
-#toolbar input {
-  padding: 5px 8px;
-  border-radius: 7px;
-}
-#toolbar button {
-  padding: 5px 10px;
-}
-#toolbar input[type="date"] {
-  width: 150px;
-}
-#toolbar #q {
-  flex: 1 1 200px;
-  min-width: 140px;
-  max-width: 420px;
-}
-
-/* Sidebar: narrower by default and able to be dragged, since the chat list was
-   eating a third of the window on wide displays. */
-#side {
-  width: var(--sidebar-w);
-  min-width: 220px;
-  max-width: 60vw;
-  resize: horizontal;
-  overflow: auto;
-}
-
-/* Vertical rhythm in the sidebar header. */
-#side header {
-  display: grid;
-  gap: 8px;
-}
-#side header input,
-#side header button {
-  width: 100%;
-}
-#side .row button {
-  width: auto;
-  flex: 1 1 auto;
-}
-#list {
-  padding-bottom: 12px;
+[data-anim="off"] * {
+  animation: none !important;
+  transition: none !important;
 }

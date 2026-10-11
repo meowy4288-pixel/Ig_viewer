@@ -8,99 +8,127 @@
   </head>
   <body>
     <aside id="side">
-      <header>
-        <div class="titlerow">
-          <b id="title">IG Chat Archive Viewer</b>
-          <button id="settings-btn" class="icon" type="button" title="Settings" aria-label="Settings">&#9881;</button>
-        </div>
-        <div class="row">
-          <button id="pick" type="button">Open folder&hellip;</button>
-          <button id="pickzip" type="button">Open .zip&hellip;</button>
-          <button id="delete" type="button" hidden>Delete index</button>
-        </div>
-        <input id="root" type="text" placeholder="Export folder path, or a .zip path" />
-        <button id="index" type="button">Import</button>
-        <input id="filter" type="search" placeholder="Filter chats…" disabled />
-        <small id="status">Starting&hellip;</small>
-        <small id="tz"></small>
-      </header>
-      <div id="fallback" class="warn" hidden></div>
-      <div id="list"></div>
-    </aside>
-
-    <main id="main">
-      <div id="toolbar" hidden>
-        <select id="me" title="Which participant are you?"></select>
-        <button id="first" type="button">Start</button>
-        <button id="prev" type="button">&#9664;</button>
-        <select id="months"></select>
-        <button id="next" type="button">&#9654;</button>
-        <button id="last" type="button">Latest</button>
-        <input id="date" type="date" title="Jump to date" />
-        <input id="q" type="search" placeholder="Search all chats…" />
-        <span class="sp"></span>
-        <button id="tzset" class="icon" type="button" title="Timezone is set in Settings">TZ</button>
+      <div class="side-top">
+        <h1>IG Archive</h1>
+        <button class="ghost" id="settings-btn" type="button" title="Settings" aria-label="Settings">
+          &#9881;
+        </button>
       </div>
-      <div id="results" hidden></div>
-      <div id="msgs">
-        <div id="welcome" class="welcome">
-          <div class="mark" aria-hidden="true"></div>
-          <h1>Read your Instagram messages offline</h1>
-          <p class="lede">
-            Point the app at an export folder, or open the <code>.zip</code> you
-            downloaded. Nothing leaves this computer.
-          </p>
-          <ul class="assurances">
-            <li>No network requests</li>
-            <li>No accounts, no telemetry</li>
-            <li>Your export folder is only ever read</li>
-          </ul>
-          <p class="dim tiny">Use the buttons on the left to get started.</p>
-        </div>
+      <div class="search">
+        <input id="filter" type="search" placeholder="Filter chats&hellip;" aria-label="Filter chats" />
       </div>
-    </main>
+      <div class="chats" id="list"></div>
+      <div class="side-foot" id="foot">No archive loaded</div>
 
-    <div id="lightbox" hidden><img id="lightbox-img" alt="" /></div>
-
-    <div id="settings" class="sheet" hidden>
-      <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-        <header>
-          <b id="settings-title">Settings</b>
-          <button id="settings-close" class="icon" type="button" aria-label="Close settings">&#10005;</button>
-        </header>
-        <div class="opt">
-          <label for="set-theme">Theme</label>
+      <div class="pop" id="settings" hidden>
+        <h3>Settings</h3>
+        <label>
+          Theme
           <select id="set-theme">
             <option value="dark">Dark</option>
-            <option value="light">Light</option>
-            <option value="system">Follow system</option>
+            <!-- Parchment variant not built yet. -->
+            <option value="light" disabled>Parchment (later)</option>
           </select>
-        </div>
-        <div class="opt">
-          <label for="set-fs">Text size</label>
+        </label>
+        <label>
+          Text size
           <input id="set-fs" type="range" min="13" max="20" step="1" />
-          <output id="set-fs-out"></output>
-        </div>
-        <div class="opt">
-          <label for="set-density">Row density</label>
+        </label>
+        <label>
+          Row density
           <select id="set-density">
             <option value="cozy">Cozy</option>
             <option value="compact">Compact</option>
           </select>
-        </div>
-        <div class="opt">
-          <label for="set-motion">Animations</label>
+        </label>
+        <label>
+          Animations
           <input id="set-motion" type="checkbox" />
-        </div>
-        <div class="opt">
-          <label for="set-tz">Default timezone</label>
+        </label>
+        <label>
+          Default timezone
           <input id="set-tz" type="text" placeholder="Europe/Warsaw" size="18" />
-        </div>
-        <footer class="dim">
-          Settings are stored locally in this app. No network, no accounts, no telemetry.
-        </footer>
+        </label>
+        <hr />
+        <button id="pick" type="button">Choose export folder&hellip;</button>
+        <button id="pickzip" type="button">Choose .zip export&hellip;</button>
+        <button id="delete" class="danger" type="button" hidden>Delete index</button>
+        <footer>Stored locally. No network, no accounts, no telemetry.</footer>
       </div>
-    </div>
+    </aside>
+
+    <main id="main">
+      <!-- import screen, shown until an archive is indexed -->
+      <div class="center" id="welcome">
+        <svg class="sigil" viewBox="-100 -100 200 200" fill="none" stroke="#b89a5e" stroke-width="1.2" aria-hidden="true">
+          <circle r="94" />
+          <circle r="86" stroke-opacity=".4" />
+          <circle r="22" fill="#6e1423" />
+          <g id="sig-p">
+            <ellipse cy="-54" rx="13" ry="30" fill="#6e142355" />
+            <circle cy="-88" r="5" />
+          </g>
+          <use href="#sig-p" transform="rotate(30)" />
+          <use href="#sig-p" transform="rotate(60)" />
+          <use href="#sig-p" transform="rotate(90)" />
+          <use href="#sig-p" transform="rotate(120)" />
+          <use href="#sig-p" transform="rotate(150)" />
+          <use href="#sig-p" transform="rotate(180)" />
+          <use href="#sig-p" transform="rotate(210)" />
+          <use href="#sig-p" transform="rotate(240)" />
+          <use href="#sig-p" transform="rotate(270)" />
+          <use href="#sig-p" transform="rotate(300)" />
+          <use href="#sig-p" transform="rotate(330)" />
+        </svg>
+        <h2>Open your archive</h2>
+        <p>
+          Choose your Instagram export, either the unzipped folder or the .zip.
+          Everything stays on this computer &ndash; the app makes no network requests.
+        </p>
+        <div class="import">
+          <div class="who" style="justify-content: stretch">
+            <button id="pick2" type="button" style="flex: 1">Choose folder&hellip;</button>
+            <button id="pickzip2" type="button" style="flex: 1">Choose .zip&hellip;</button>
+          </div>
+          <input id="root" type="text" placeholder="&hellip;or paste the folder path" />
+          <button class="primary" id="index" type="button">Index this folder</button>
+          <div class="bar"><i id="fill"></i></div>
+          <small id="status" style="color: var(--ash)">Starting&hellip;</small>
+        </div>
+      </div>
+
+      <!-- participant prompt -->
+      <div class="center overlay" id="whopick" hidden>
+        <h2>Which one are you?</h2>
+        <p>Your messages will sit on the right.</p>
+        <div class="who" id="whobtns"></div>
+      </div>
+
+      <div class="head" id="toolbar" hidden>
+        <div class="arch" id="hav"></div>
+        <div class="t">
+          <b id="hname"></b>
+          <small id="hsub"></small>
+        </div>
+        <div class="timebar">
+          <button id="me" class="ghost" type="button" title="Which participant are you?">Me</button>
+          <button id="first" type="button">Start</button>
+          <button id="prev" type="button" title="Previous month" aria-label="Previous month">&#9664;</button>
+          <select id="months" title="Month" aria-label="Month"></select>
+          <button id="next" type="button" title="Next month" aria-label="Next month">&#9654;</button>
+          <button id="last" class="primary" type="button">Latest</button>
+          <input id="date" type="date" title="Jump to date" aria-label="Jump to date" />
+          <input id="q" type="search" placeholder="Search all chats&hellip;" aria-label="Search all chats" />
+        </div>
+      </div>
+      <div class="view" id="msgs" hidden></div>
+      <button class="latest" id="latestf" type="button" hidden>&darr; Latest</button>
+    </main>
+
+    <dialog id="lightbox">
+      <button class="ghost" id="lightbox-close" type="button" aria-label="Close">&#10005;</button>
+      <div class="lbimg" id="lightbox-img"></div>
+    </dialog>
 
     <script type="module" src="./main.js"></script>
   </body>
