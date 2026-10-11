@@ -175,10 +175,14 @@ async function onPick(): Promise<void> {
 
 async function attach(id: string): Promise<void> {
   state.id = id;
-  $("#delete").hidden = false;
-  $("#toolbar").hidden = false;
   await refreshTimezone();
   await refreshThreads();
+  // Only reveal the archive chrome once the archive actually resolved. A stale
+  // id in localStorage used to leave an empty toolbar and a Delete button
+  // pointing at an archive that no longer exists.
+  const live = state.threads.length > 0;
+  $("#delete").hidden = !live;
+  $("#toolbar").hidden = !live;
 }
 
 async function refreshTimezone(): Promise<void> {
