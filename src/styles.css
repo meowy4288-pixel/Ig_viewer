@@ -332,11 +332,31 @@ option:disabled {
   color: var(--ash);
   font-size: 13px;
 }
+/* Month navigation sits on its own full-width strip beneath the chat identity.
+   Sharing a row with the title and search left it wrapping at arbitrary window
+   widths, so it read as an accident rather than a decision. */
 .timebar {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--nave);
+}
+/* The identity row no longer needs to wrap: it holds only arch, title, search. */
+.head {
+  flex-wrap: nowrap;
+}
+.head .t {
+  flex: 1 1 auto;
+}
+.head #q {
+  flex: 0 1 260px;
+}
+/* Keep the strip visually part of the header block rather than a floating bar. */
+.timebar {
+  margin: 0;
 }
 .timebar select,
 .timebar input {

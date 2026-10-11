@@ -104,22 +104,27 @@
         <div class="who" id="whobtns"></div>
       </div>
 
-      <div class="head" id="toolbar" hidden>
+      <div id="toolbar" hidden>
+      <div class="head">
         <div class="arch" id="hav"></div>
         <div class="t">
           <b id="hname"></b>
           <small id="hsub"></small>
         </div>
-        <div class="timebar">
-          <button id="me" class="ghost" type="button" title="Which participant are you?">Me</button>
-          <button id="first" type="button">Start</button>
-          <button id="prev" type="button" title="Previous month" aria-label="Previous month">&#9664;</button>
-          <select id="months" title="Month" aria-label="Month"></select>
-          <button id="next" type="button" title="Next month" aria-label="Next month">&#9654;</button>
-          <button id="last" class="primary" type="button">Latest</button>
-          <input id="date" type="date" title="Jump to date" aria-label="Jump to date" />
-          <input id="q" type="search" placeholder="Search all chats&hellip;" aria-label="Search all chats" />
-        </div>
+        <input id="q" type="search" placeholder="Search all chats&hellip;" aria-label="Search all chats" />
+      </div>
+      <!-- Month navigation is its own full-width strip. Sharing a row with the
+           chat identity and the search field left it wrapping at arbitrary
+           window widths, which looked accidental rather than designed. -->
+      <div class="timebar" id="navrow">
+        <button id="me" class="ghost" type="button" title="Which participant are you?">Me</button>
+        <button id="first" type="button">Start</button>
+        <button id="prev" type="button" title="Previous month" aria-label="Previous month">&#9664;</button>
+        <select id="months" title="Month" aria-label="Month"></select>
+        <button id="next" type="button" title="Next month" aria-label="Next month">&#9654;</button>
+        <button id="last" class="primary" type="button">Latest</button>
+        <input id="date" type="date" title="Jump to date" aria-label="Jump to date" />
+      </div>
       </div>
       <div class="view" id="msgs" hidden></div>
       <button class="latest" id="latestf" type="button" hidden>&darr; Latest</button>
