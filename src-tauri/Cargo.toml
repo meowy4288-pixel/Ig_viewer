@@ -31,12 +31,9 @@ chrono-tz = "0.10"
 # member path is validated against the destination root before anything is written,
 # so a zip-slip entry cannot escape.
 zip = { version = "2", default-features = false, features = ["deflate"] }
-tauri-plugin-dialog = "2.8.2"
 
-# Desktop only: rfd has no Android backend (macOS/Windows/wasm/*nix only), and its
-# gtk/xdg-portal deps do not build for target_os = "android". The picker commands in
-# lib.rs have matching Android stubs, so nothing calls it there.
-[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+# rfd covers the desktop pickers (macOS/Windows/*nix). Android is a separate native
+# app under android-app/, so this crate no longer carries any mobile target cfg.
 rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "tokio"] }
 
 [dev-dependencies]

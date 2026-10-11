@@ -8,7 +8,6 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
 import {
   type MonthBucket,
   type ThreadSummary,
@@ -118,11 +117,6 @@ function loadPrefs(): Prefs {
 
 function applyPrefs(p: Prefs): void {
   const root = document.documentElement;
-  // Android cannot open a native folder dialog yet; offer the push-import instead.
-  document.documentElement.classList.toggle(
-    "android",
-    /Android/i.test(navigator.userAgent),
-  );
   // Animations are off if the user turned them off *or* the OS asks for reduced
   // motion. The settings toggle shows the effective value.
   const prefersLight = window.matchMedia?.("(prefers-color-scheme: light)").matches ?? false;
@@ -162,19 +156,7 @@ async function onPickZip(): Promise<void> {
   status("Waiting for the file picker\u2026");
   let raw: string | null;
   try {
-    const viaDialog = await pickViaDialog({
-      directory: false,
-      filters: [{ name: "Instagram export", extensions: ["zip"] }],
-    });
-    if (viaDialog !== undefined) {
-      if (viaDialog === null) {
-        status("File selection cancelled.");
-        return;
-      }
-      raw = viaDialog;
-    } else {
-      raw = await invoke<string | null>("pick_export_zip");
-    }
+    raw = await invoke<string | null>("pick_export_zip");
   } catch (err) {
     status(`Could not open the file picker (${String(err)}).`);
     return;
@@ -201,85 +183,10 @@ async function onPickZip(): Promise<void> {
   }
 }
 
-// Android ships a fake export inside the APK so the app is usable on a device
-// with no import step. Copy it out and index it the first time we run.
-async function seedOnFirstRun(): Promise<void> {
-  if (!/Android/i.test(navigator.userAgent)) return;
-  try {
-    const root = await invoke<string | null>("seed_demo_archive");
-    if (root) {
-      await doIndex(root);
-      status("Loaded the bundled sample archive.");
-    }
-  } catch (err) {
-    status(`Sample archive unavailable: ${String(err)}`);
-  }
-}
-
-async function onPickAppDir(): Promise<void> {
-  status("Looking for a pushed .zip or export folder\u2026");
-  try {
-    const res = JSON.parse(await invoke<string>("import_from_app_dir")) as {
-      kind: string;
-      export_root: string;
-      files?: number;
-    };
-    state.id = "";
-    await doIndex(res.export_root);
-    status(
-      res.kind === "zip"
-        ? `Extracted ${res.files} files.`
-        : "Indexing the pushed folder.",
-    );
-  } catch (err) {
-    const e = String(err);
-    status(
-      e.includes("nothing-found")
-        ? "No .zip or your_instagram_activity folder found. Push one with: adb push <path> /sdcard/Android/data/com.ig.viewer.app/files/"
-        : `Import failed (${e}).`,
-    );
-  }
-}
-
-/**
- * Try the dialog plugin.
- *
- * Returns undefined when the plugin is unavailable (desktop, where rfd is used),
- * a path when the user chose something, or null when they cancelled. Feature
- * detection by attempting the call is deliberate: sniffing the user agent is
- * unreliable in the Tauri webview and previously routed Android users into the
- * stubbed desktop pickers.
- */
-async function pickViaDialog(opts: {
-  directory: boolean;
-  filters?: { name: string; extensions: string[] }[];
-}): Promise<string | null | undefined> {
-  try {
-    const picked = await open({
-      multiple: false,
-      directory: opts.directory,
-      ...(opts.filters ? { filters: opts.filters } : {}),
-    });
-    return picked === null ? null : String(picked);
-  } catch {
-    return undefined;
-  }
-}
-
 async function onPick(): Promise<void> {
   status("Waiting for the folder picker\u2026");
   let raw: string | null;
   try {
-    const viaDialog = await pickViaDialog({ directory: true });
-    if (viaDialog !== undefined) {
-      if (viaDialog === null) {
-        status("Folder selection cancelled.");
-        return;
-      }
-      $<HTMLInputElement>("#root").value = viaDialog;
-      await doIndex(viaDialog);
-      return;
-    }
     raw = await invoke<string | null>("pick_export_folder");
   } catch (err) {
     status(`Could not open the folder picker (${String(err)}).`);
@@ -614,8 +521,6 @@ async function doDeleteIndex(): Promise<void> {
 function wire(): void {
   $("#pick").addEventListener("click", () => void onPick());
   $("#pickzip").addEventListener("click", () => void onPickZip());
-  $("#picksd").addEventListener("click", () => void onPickAppDir());
-  void seedOnFirstRun();
   $("#settings-btn").addEventListener("click", () => openSettings(true));
   $("#settings-close").addEventListener("click", () => openSettings(false));
   $("#settings").addEventListener("click", (e) => {

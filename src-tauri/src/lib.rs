@@ -4,7 +4,6 @@ use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 pub mod db;
 pub mod ingest;
 pub mod media;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod picker;
 pub mod protocol;
 pub mod scan;
@@ -13,7 +12,6 @@ pub mod zip;
 
 use std::path::{Path, PathBuf};
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use picker::{FolderPicker, NativeFolderPicker};
 
 /// Archives dir: `<app_data_dir>/archives`. One DB per archive.
@@ -48,7 +46,6 @@ fn app_info() -> String {
 /// Android this reports `picker-unavailable` rather than failing to compile. Android
 /// folder access needs the Storage Access Framework, which yields a `content://` URI
 /// rather than a path -- see the notes in `scan.rs`.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 fn pick_export_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
     let picker = NativeFolderPicker;
@@ -73,58 +70,6 @@ fn pick_export_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
 /// usable on a device with no import step. On first run it is copied into app
 /// storage, which is the only writable location, and then indexed normally.
 ///
-/// Only ever seeds when there are no archives yet, so a real archive is never
-/// displaced. Returns None on desktop and when the seed is absent.
-#[tauri::command]
-fn seed_demo_archive(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    let dir = archives_dir(&app)?;
-    let has_existing = std::fs::read_dir(&dir)
-        .map(|mut rd| rd.next().is_some())
-        .unwrap_or(false);
-    if has_existing {
-        return Ok(None);
-    }
-
-    let dest = dir.join("seed");
-    if dest.exists() {
-        std::fs::remove_dir_all(&dest).map_err(|_| "seed-clear".to_string())?;
-    }
-
-    // assets/seed-export lives inside the APK; copy it out into app storage.
-    let assets = app
-        .path()
-        .resource_dir()
-        .map_err(|_| "no-resource-dir".to_string())?;
-    let src = assets.join("seed-export");
-    if !src.is_dir() {
-        return Ok(None);
-    }
-    copy_tree(&src, &dest)?;
-    db::restrict(&dest, 0o700);
-
-    let root = if dest.join("your_instagram_activity").is_dir() {
-        dest.join("your_instagram_activity")
-    } else {
-        dest
-    };
-    Ok(Some(root.to_string_lossy().to_string()))
-}
-
-/// Recursively copy a directory tree.
-fn copy_tree(src: &Path, dst: &Path) -> Result<(), String> {
-    std::fs::create_dir_all(dst).map_err(|_| "mkdir".to_string())?;
-    for e in std::fs::read_dir(src).map_err(|_| "read-src".to_string())? {
-        let e = e.map_err(|_| "read-entry".to_string())?;
-        let to = dst.join(e.file_name());
-        if e.path().is_dir() {
-            copy_tree(&e.path(), &to)?;
-        } else {
-            std::fs::copy(e.path(), &to).map_err(|_| "copy-file".to_string())?;
-        }
-    }
-    Ok(())
-}
-
 /// Import from Android's app-specific external files directory.
 ///
 /// This is the escape hatch that makes the APK testable without the Storage Access
@@ -136,73 +81,8 @@ fn copy_tree(src: &Path, dst: &Path) -> Result<(), String> {
 /// and nothing outside these directories is readable. A real SAF flow will replace
 /// this; until then this is deliberately narrow.
 ///
-/// Looks for a single `*.zip` or a single `your_instagram_activity` directory.
-#[tauri::command]
-fn import_from_app_dir(app: tauri::AppHandle) -> Result<String, String> {
-    let external = app
-        .path()
-        .app_data_dir()
-        .map_err(|_| "no-app-data-dir".to_string())?;
-
-    // app_data_dir on Android is .../files (internal); the external variant is the
-    // one reachable by adb. Probe both.
-    let mut candidates = vec![external.clone()];
-    if let Some(ext) = external.to_str().and_then(|s| s.split("/files").next()) {
-        candidates.push(PathBuf::from(ext).join("files"));
-    }
-
-    for root in &candidates {
-        let entries = match std::fs::read_dir(root) {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-        for e in entries.flatten() {
-            let path = e.path();
-            if path.is_file()
-                && path
-                    .extension()
-                    .is_some_and(|x| x.eq_ignore_ascii_case("zip"))
-            {
-                let dest = archives_dir(&app)?.join("pending-zip");
-                let _ = std::fs::remove_dir_all(&dest);
-                let (root_dir, report) =
-                    zip::extract_zip(&path, &dest).map_err(|e| e.code().to_string())?;
-                return Ok(serde_json::json!({
-                    "kind": "zip",
-                    "export_root": root_dir,
-                    "files": report.files,
-                })
-                .to_string());
-            }
-            if path.is_dir() && path.join("your_instagram_activity").is_dir() {
-                return Ok(serde_json::json!({
-                    "kind": "folder",
-                    "export_root": path.join("your_instagram_activity"),
-                })
-                .to_string());
-            }
-        }
-    }
-    Err("nothing-found-in-app-dir".to_string())
-}
-
-/// Android stand-in: no rfd backend exists, and SAF is not wired up yet.
-#[cfg(any(target_os = "android", target_os = "ios"))]
-#[tauri::command]
-fn pick_export_folder(_app: tauri::AppHandle) -> Result<Option<String>, String> {
-    Err("picker-unavailable".to_string())
-}
-
-/// Android stand-in, see `pick_export_folder` above.
-#[cfg(any(target_os = "android", target_os = "ios"))]
-#[tauri::command]
-fn pick_export_zip(_app: tauri::AppHandle) -> Result<Option<String>, String> {
-    Err("picker-unavailable".to_string())
-}
-
 /// Pick an Instagram `.zip` export. Returns the chosen path; the webview only ever
 /// sees it long enough to hand straight back to `extract_export`.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 fn pick_export_zip(app: tauri::AppHandle) -> Result<Option<String>, String> {
     let picked = rfd::FileDialog::new()
@@ -735,17 +615,13 @@ fn allow_dev_server(_url: &tauri::Url) -> bool {
     false
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .register_asynchronous_uri_scheme_protocol("igmedia", igmedia_handler)
-        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             app_info,
             pick_export_folder,
             pick_export_zip,
-            import_from_app_dir,
-            seed_demo_archive,
             extract_export,
             index_archive,
             list_threads,
