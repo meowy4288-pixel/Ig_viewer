@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose supplies the real theming; this only needs to avoid an ActionBar. -->
+    <style name="Theme.IGArchive" parent="android:Theme.Material.NoActionBar" />
+</resources>
