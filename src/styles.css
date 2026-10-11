@@ -253,6 +253,14 @@ option:disabled {
   border-top: 1px solid var(--line);
   font-size: 13px;
   color: var(--ash);
+  /* Status strings can be a full sentence; clamp to two lines instead of
+     stretching the sidebar and pushing the app sideways. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 /* -------------------------------------------------------------- popovers */
@@ -323,14 +331,23 @@ option:disabled {
 .head .t {
   flex: 1 1 200px;
   min-width: 0;
+  overflow: hidden;
 }
 .head b {
   font: 600 19px/1.1 var(--font-display);
   display: block;
+  /* A long chat name must ellipsize, not push the header wider than the window. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .head small {
   color: var(--ash);
   font-size: 13px;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* Month navigation sits on its own full-width strip beneath the chat identity.
    Sharing a row with the title and search left it wrapping at arbitrary window
@@ -458,6 +475,7 @@ option:disabled {
 .center p {
   max-width: 46ch;
   color: var(--ash);
+  overflow-wrap: anywhere;
 }
 .import {
   display: grid;
