@@ -85,15 +85,31 @@ fn pick_export_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
 /// sees it long enough to hand straight back to `extract_export`.
 #[tauri::command]
 fn pick_export_zip(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    let picked = rfd::FileDialog::new()
-        .set_title("Select your Instagram .zip export")
-        .add_filter("Instagram export", &["zip"])
-        .pick_file();
-    let Some(path) = picked else {
-        return Ok(None);
-    };
+    // Same reactor requirement as the folder picker: rfd's xdg-portal backend
+    // panics without one. See picker.rs for the full explanation.
+    let picked = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|_| "picker-runtime".to_string())?
+        .block_on(async {
+            rfd::AsyncFileDialog::new()
+                .set_title("Select your Instagram .zip export")
+                .add_filter("Instagram export", &["zip"])
+                .pick_file()
+                .await
+        });
     let _ = &app;
-    Ok(path.into_os_string().into_string().ok())
+    // Non-UTF-8 paths cannot cross the IPC boundary as a String; report that
+    // rather than silently returning nothing.
+    let path = picked.map(|h| h.path().to_path_buf());
+    match path {
+        None => Ok(None),
+        Some(p) => p
+            .into_os_string()
+            .into_string()
+            .map(Some)
+            .map_err(|_| "non-utf8-path".to_string()),
+    }
 }
 
 /// Unpack a user-supplied Instagram `.zip` into this archive's cache and return the

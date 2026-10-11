@@ -113,7 +113,10 @@ pub fn parse_file_number(name: &str) -> Result<u32, SkipReason> {
 ///
 /// `<root>/your_instagram_activity/messages/inbox`
 fn inbox_dir(root: &Path) -> PathBuf {
-    let inner = root.join("your_instagram_activity").join("messages").join("inbox");
+    let inner = root
+        .join("your_instagram_activity")
+        .join("messages")
+        .join("inbox");
     if inner.is_dir() {
         return inner;
     }
@@ -121,7 +124,9 @@ fn inbox_dir(root: &Path) -> PathBuf {
     // folder is named differently.
     for candidate in [
         root.join("messages").join("inbox"),
-        root.join("your_instagram_activity").join("messages").join("inbox"),
+        root.join("your_instagram_activity")
+            .join("messages")
+            .join("inbox"),
     ] {
         if candidate.is_dir() {
             return candidate;
