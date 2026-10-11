@@ -1,8 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { cpSync, copyFileSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const STATIC_EXT = [".html", ".css", ".svg", ".png", ".ico"];
+// .woff2/.woff are bundled fonts: the app is fully offline and CSP is
+// `font-src 'self'`, so they must ship locally rather than come from a CDN.
+const STATIC_EXT = [".html", ".css", ".svg", ".png", ".ico", ".woff2", ".woff", ".txt"];
 
 function isStatic(name) {
   return STATIC_EXT.some((ext) => name.endsWith(ext));
@@ -30,10 +32,20 @@ run("npx", [
   "--sourcemap",
 ]);
 
-for (const name of readdirSync("src")) {
-  if (!isStatic(name)) continue;
-  copyFileSync(join("src", name), join("dist", name));
+// Copy static files, recursing into directories so src/fonts/ reaches dist/.
+function copyStatic(from, to) {
+  for (const name of readdirSync(from)) {
+    const src = join(from, name);
+    if (statSync(src).isDirectory()) {
+      copyStatic(src, join(to, name));
+      continue;
+    }
+    if (!isStatic(name)) continue;
+    mkdirSync(to, { recursive: true });
+    copyFileSync(src, join(to, name));
+  }
 }
+copyStatic("src", "dist");
 
 // Guard: the bundle must be self-contained. A bare/non-relative specifier means
 // esbuild did not inline a dependency (e.g. `@tauri-apps/api`), which the
