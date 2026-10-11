@@ -12,7 +12,7 @@ pub mod zip;
 
 use std::path::{Path, PathBuf};
 
-use picker::{FolderPicker, NativeFolderPicker};
+use picker::{pick_folder_native, pick_zip_native};
 
 /// Archives dir: `<app_data_dir>/archives`. One DB per archive.
 fn archives_dir<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
@@ -47,10 +47,8 @@ fn app_info() -> String {
 /// folder access needs the Storage Access Framework, which yields a `content://` URI
 /// rather than a path -- see the notes in `scan.rs`.
 #[tauri::command]
-fn pick_export_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    let picker = NativeFolderPicker;
-    let picked = picker
-        .pick_folder("Select your unzipped Instagram export folder")
+async fn pick_export_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let picked = pick_folder_native("Select your unzipped Instagram export folder").await
         .ok_or_else(|| "picker-unavailable".to_string())?;
     let dir = archives_dir(&app)?;
     let id = new_archive_id();
@@ -84,24 +82,12 @@ fn pick_export_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
 /// Pick an Instagram `.zip` export. Returns the chosen path; the webview only ever
 /// sees it long enough to hand straight back to `extract_export`.
 #[tauri::command]
-fn pick_export_zip(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    // Same reactor requirement as the folder picker: rfd's xdg-portal backend
-    // panics without one. See picker.rs for the full explanation.
-    let picked = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|_| "picker-runtime".to_string())?
-        .block_on(async {
-            rfd::AsyncFileDialog::new()
-                .set_title("Select your Instagram .zip export")
-                .add_filter("Instagram export", &["zip"])
-                .pick_file()
-                .await
-        });
+async fn pick_export_zip(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let picked = pick_zip_native("Select your Instagram .zip export").await;
     let _ = &app;
     // Non-UTF-8 paths cannot cross the IPC boundary as a String; report that
     // rather than silently returning nothing.
-    let path = picked.map(|h| h.path().to_path_buf());
+    let path = picked;
     match path {
         None => Ok(None),
         Some(p) => p
