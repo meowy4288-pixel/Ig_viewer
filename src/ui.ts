@@ -10,6 +10,7 @@ import {
   type UiMessage,
   type UiMedia,
   clockTime,
+  dayKey,
   dayHeading,
   isAudioKind,
   isImageKind,
@@ -139,6 +140,7 @@ export function renderMessage(
   hasNext: boolean,
   showSender: boolean,
   index: number,
+  tz: string,
 ): HTMLElement {
   const mine = me !== "" && m.sender === me;
   const cls = ["msg"];
@@ -151,6 +153,7 @@ export function renderMessage(
   const bubble = el("div", cls.join(" "));
   if (index < STAGGER_CAP) bubble.style.setProperty("--i", String(index));
   bubble.dataset.messageId = String(m.id);
+  bubble.dataset.day = dayKey(m.ts_ms, tz);
 
   if (!mine && !grouped && showSender) bubble.append(el("span", "sender", m.sender));
 
@@ -191,6 +194,7 @@ export function renderMonth(
   messages: UiMessage[],
   me: string,
   showSenders: boolean,
+  tz: string,
 ): DocumentFragment {
   const frag = document.createDocumentFragment();
   // Mirrors GROUP_WINDOW_MIN in the design.
@@ -214,7 +218,7 @@ export function renderMonth(
     const grouped =
       prev !== null && groupable(prev) && groupable(m) && prev.sender === m.sender &&
       m.ts_ms - prev.ts_ms < GROUP_WINDOW_MS;
-    frag.append(renderMessage(m, me, grouped, joined, showSenders, index));
+    frag.append(renderMessage(m, me, grouped, joined, showSenders, index, tz));
     index += 1;
     prev = m;
   }

@@ -273,3 +273,24 @@ export function resolveTheme(theme: Theme, prefersLight: boolean): "light" | "da
 export function motionEnabled(p: Prefs, prefersReducedMotion: boolean): boolean {
   return p.motion && !prefersReducedMotion;
 }
+
+/**
+ * Local day key (`YYYY-MM-DD`) for a timestamp, in the given timezone.
+ *
+ * Month buckets are computed in the archive's timezone, so day keys must use it
+ * too or the day select and the message bubbles disagree about what day a
+ * message is on. `en-CA` yields an ISO-ordered `YYYY-MM-DD` string.
+ */
+export function dayKey(tsMs: number, tz: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(tsMs));
+  } catch {
+    // An unknown zone must not break rendering; fall back to UTC.
+    return new Date(tsMs).toISOString().slice(0, 10);
+  }
+}

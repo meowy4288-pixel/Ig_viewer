@@ -362,11 +362,49 @@ option:disabled {
 .timebar input {
   min-width: 0;
 }
-#months {
-  max-width: 190px;
+.timebar .lead {
+  color: var(--ash);
+  font-size: 13px;
+  margin-right: 2px;
 }
-#date {
+.timebar .sp {
+  flex: 1;
+}
+/* Arrows have no button chrome so they read as part of the date group rather
+   than as extra toolbar buttons. */
+.dategroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.stepper {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--gilt);
+  font: 400 20px/1 var(--font-display);
+  padding: 0 6px;
+  width: 30px;
+  height: 32px;
+  display: inline-grid;
+  place-items: center;
+  transition: color 0.18s, border-color 0.18s;
+}
+.stepper:hover:not(:disabled) {
+  color: var(--gilt);
+  border-color: var(--gilt-dim);
+}
+.stepper:disabled {
+  opacity: 0.28;
+  cursor: not-allowed;
+}
+#years {
+  width: 92px;
+}
+#months {
   width: 150px;
+}
+#days {
+  width: 110px;
 }
 #q {
   min-width: 160px;

@@ -118,12 +118,17 @@
            window widths, which looked accidental rather than designed. -->
       <div class="timebar" id="navrow">
         <button id="me" class="ghost" type="button" title="Which participant are you?">Me</button>
-        <button id="first" type="button">Start</button>
-        <button id="prev" type="button" title="Previous month" aria-label="Previous month">&#9664;</button>
-        <select id="months" title="Month" aria-label="Month"></select>
-        <button id="next" type="button" title="Next month" aria-label="Next month">&#9654;</button>
+        <span class="lead">Jump to</span>
+        <span class="dategroup">
+          <button class="stepper" id="prev" type="button" title="Previous day with messages" aria-label="Previous day">&#8249;</button>
+          <select id="years" title="Year" aria-label="Year"></select>
+          <select id="months" title="Month" aria-label="Month"></select>
+          <select id="days" title="Day" aria-label="Day"></select>
+          <button class="stepper" id="next" type="button" title="Next day with messages" aria-label="Next day">&#8250;</button>
+        </span>
+        <span class="sp"></span>
+        <button id="first" type="button">Earliest</button>
         <button id="last" class="primary" type="button">Latest</button>
-        <input id="date" type="date" title="Jump to date" aria-label="Jump to date" />
       </div>
       </div>
       <div class="view" id="msgs" hidden></div>

@@ -9,17 +9,15 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import {
+  dayKey,
   type MonthBucket,
   type ThreadSummary,
   type UiMessage,
   filterThreads,
-  firstIndexAtOrAfter,
   inDisplayOrder,
   motionEnabled,
-  monthOfIsoDate,
   parsePrefs,
   resolveTheme,
-  tsForIsoDate,
   type Prefs,
 } from "./logic";
 import { avatarChip, closeLightbox, el, renderMonth, renderSearchHit } from "./ui";
@@ -33,6 +31,8 @@ interface ArchiveState {
   months: MonthBucket[];
   monthIndex: number;
   messages: UiMessage[];
+  /** Distinct days present in the loaded month, ascending, in the archive timezone. */
+  days: string[];
   me: string;
   timezone: string;
 }
@@ -46,6 +46,7 @@ const state: ArchiveState = {
   months: [],
   monthIndex: 0,
   messages: [],
+  days: [],
   me: "",
   timezone: "UTC",
 };
@@ -300,6 +301,123 @@ async function refreshThreads(): Promise<void> {
   }
 }
 
+// ------------------------------------------------------------ date controls
+// Year / Month / Day are three selects rather than one month list, so a day can be
+// chosen directly. Everything is derived from state.months (the real month buckets
+// from `GROUP BY month`, which only ever contains months that have messages) and,
+// within the loaded month, from the messages themselves.
+
+/** Distinct `YYYY-MM-DD` days present in a month's messages, ascending. */
+function distinctDays(messages: UiMessage[], tz: string): string[] {
+  const seen = new Set<string>();
+  for (const m of messages) {
+    if (Number.isNaN(new Date(m.ts_ms).getTime())) continue;
+    seen.add(dayKey(m.ts_ms, tz));
+  }
+  return [...seen].sort();
+}
+
+
+
+function monthLabel(key: string): string {
+  const [y, m] = key.split("-");
+  const d = new Date(Number(y), Number(m) - 1, 1);
+  return d.toLocaleDateString(undefined, { month: "long" }) + " " + y;
+}
+
+function fillDateControls(): void {
+  const bucket = state.months[state.monthIndex];
+  if (!bucket) return;
+  const [year] = bucket.key.split("-");
+
+  const years = [...new Set(state.months.map((m) => m.key.split("-")[0]))];
+  const ys = $<HTMLSelectElement>("#years");
+  ys.replaceChildren();
+  for (const y of years) {
+    const o = document.createElement("option");
+    o.value = y;
+    o.textContent = y;
+    ys.append(o);
+  }
+  ys.value = year;
+
+  const months = state.months.filter((m) => m.key.startsWith(year + "-"));
+  const ms = $<HTMLSelectElement>("#months");
+  ms.replaceChildren();
+  for (const m of months) {
+    const o = document.createElement("option");
+    o.value = m.key;
+    o.textContent = monthLabel(m.key);
+    ms.append(o);
+  }
+  ms.value = bucket.key;
+
+  const ds = $<HTMLSelectElement>("#days");
+  ds.replaceChildren();
+  if (state.days.length === 0) {
+    const o = document.createElement("option");
+    o.textContent = "\u2014";
+    o.disabled = true;
+    ds.append(o);
+  } else {
+    for (const d of state.days) {
+      const o = document.createElement("option");
+      o.value = d;
+      o.textContent = new Date(`${d}T12:00:00`).toLocaleDateString(undefined, {
+        day: "numeric",
+        month: "short",
+      });
+      ds.append(o);
+    }
+    ds.value = state.days[0];
+  }
+  syncStepper();
+}
+
+/**
+ * Arrows step through days that actually contain messages, crossing month and year
+ * boundaries. Most days in a real export are empty, so a naive +/-1 day would keep
+ * landing on nothing.
+ */
+function syncStepper(): void {
+  const ds = state.days;
+  const bucket = state.months[state.monthIndex];
+  const i = ds.indexOf(`${bucket?.key ?? ""}-${$<HTMLSelectElement>("#days").value.slice(5)}`);
+  const at = i < 0 ? 0 : i;
+  $<HTMLButtonElement>("#prev").disabled = at <= 0;
+  $<HTMLButtonElement>("#next").disabled = at >= ds.length - 1;
+}
+
+async function stepDay(dir: -1 | 1): Promise<void> {
+  const ds = state.days;
+  const bucket = state.months[state.monthIndex];
+  if (!bucket || ds.length === 0) return;
+  const cur = ds.indexOf(`${bucket.key}-${$<HTMLSelectElement>("#days").value.slice(5)}`);
+  const at = (cur < 0 ? 0 : cur) + dir;
+  if (at < 0 || at >= ds.length) return;
+
+  // Crossing a month boundary means loading that month first.
+  const target = ds[at];
+  const targetMonth = target.slice(0, 7);
+  if (targetMonth !== bucket.key) {
+    const mi = state.months.findIndex((m) => m.key === targetMonth);
+    if (mi < 0) return;
+    await showMonth(mi);
+  }
+  $<HTMLSelectElement>("#days").value = target;
+  syncStepper();
+  scrollToDay(target);
+}
+
+/** Hide messages outside `day` in the current month. */
+function scrollToDay(day: string): void {
+  for (const node of Array.from($<HTMLElement>("#msgs").children) as HTMLElement[]) {
+    if (!node.classList.contains("msg")) continue;
+    const d = node.dataset.day;
+    if (d) node.hidden = d !== day;
+  }
+}
+
 /** The "Me" control is a button in the new design, so it shows the current pick. */
 function renderMeButton(): void {
   const b = $<HTMLButtonElement>("#me");
@@ -401,8 +519,6 @@ async function showMonth(index: number, where: "start" | "end" | "focus" = "star
   const clamped = Math.max(0, Math.min(index, state.months.length - 1));
   state.monthIndex = clamped;
   const bucket = state.months[clamped];
-  $<HTMLSelectElement>("#months").value = String(clamped);
-  $<HTMLInputElement>("#date").value = "";
 
   status(`Loading ${bucket.key}\u2026`);
   const raw = await invoke<string>("get_month", {
@@ -412,6 +528,9 @@ async function showMonth(index: number, where: "start" | "end" | "focus" = "star
   });
   const data = JSON.parse(raw) as { messages: UiMessage[] };
   state.messages = inDisplayOrder(data.messages);
+  // Days are derived from the loaded month rather than queried separately, so
+  // the stepper never offers a day that has no messages.
+  state.days = distinctDays(state.messages, state.timezone);
 
   $("#hname").textContent = state.threadTitle;
   $("#hav").textContent = (state.threadTitle.trim()[0] ?? "?").toUpperCase();
@@ -421,7 +540,8 @@ async function showMonth(index: number, where: "start" | "end" | "focus" = "star
   box.hidden = false;
   $("#welcome").hidden = true;
   $("#latestf").hidden = false;
-  box.replaceChildren(renderMonth(state.messages, state.me, state.participants.length > 2));
+  fillDateControls();
+  box.replaceChildren(renderMonth(state.messages, state.me, state.participants.length > 2, state.timezone));
   if (where === "end") box.scrollTop = box.scrollHeight;
   else box.scrollTop = 0;
   status(`${state.messages.length} messages in ${bucket.key}.`);
@@ -430,35 +550,6 @@ async function showMonth(index: number, where: "start" | "end" | "focus" = "star
     const target = box.querySelector<HTMLElement>(".row.flash");
     target?.scrollIntoView({ block: "center" });
   }
-}
-
-async function jumpToDate(iso: string): Promise<void> {
-  const ts = tsForIsoDate(iso);
-  if (ts === null) {
-    status("Pick a valid date.");
-    return;
-  }
-  const month = monthOfIsoDate(iso);
-  let idx = state.months.findIndex((m) => m.key === month);
-  if (idx < 0) {
-    // The month may not be in the current thread's list; ask the backend which
-    // bucket covers that instant.
-    const raw = await invoke<string>("month_for_ts", { archiveId: state.id, tsMs: ts });
-    const { month: resolved } = JSON.parse(raw) as { month: string };
-    idx = state.months.findIndex((m) => m.key === resolved);
-  }
-  if (idx < 0) {
-    status("No messages around that date in this chat.");
-    return;
-  }
-  await showMonth(idx, "start");
-  // Land on the first message at or after the requested day.
-  const box = $("#msgs");
-  const idxInMonth = firstIndexAtOrAfter(state.messages, ts);
-  const rows = box.querySelectorAll<HTMLElement>(".row");
-  rows.forEach((r) => r.classList.remove("flash"));
-  rows[idxInMonth]?.classList.add("flash");
-  rows[idxInMonth]?.scrollIntoView({ block: "center" });
 }
 
 // ------------------------------------------------------------- search
@@ -583,23 +674,33 @@ function wire(): void {
   $("#index").addEventListener("click", () => void doIndex());
   $("#delete").addEventListener("click", () => void doDeleteIndex());
   $("#filter").addEventListener("input", () => renderThreadList());
-  $("#prev").addEventListener("click", () => void showMonth(state.monthIndex - 1));
-  $("#next").addEventListener("click", () => void showMonth(state.monthIndex + 1));
-  $("#first").addEventListener("click", () => void showMonth(0));
-  $("#last").addEventListener("click", () =>
-    void showMonth(Math.max(0, state.months.length - 1), "end"),
-  );
-  $("#months").addEventListener("change", (e) =>
-    void showMonth(Number((e.target as HTMLSelectElement).value)),
-  );
-  $("#date").addEventListener("change", (e) =>
-    void jumpToDate((e.target as HTMLInputElement).value),
-  );
+  $("#prev").addEventListener("click", () => void stepDay(-1));
+  $("#next").addEventListener("click", () => void stepDay(1));
   $("#q").addEventListener("input", (e) => void runSearch((e.target as HTMLInputElement).value));
   $("#me").addEventListener("click", () => void chooseMe());
   window.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeLightbox();
+    if (e.key === "Escape") {
+      closeLightbox();
+      if (!$("#whopick").hidden) $("#whopick").hidden = true;
+    }
   });
+  $("#years").addEventListener("change", (e) => {
+    const y = (e.target as HTMLSelectElement).value;
+    const mi = state.months.findIndex((m) => m.key.startsWith(y + "-"));
+    if (mi >= 0) void showMonth(mi);
+  });
+  $("#months").addEventListener("change", (e) => {
+    const mi = state.months.findIndex((m) => m.key === (e.target as HTMLSelectElement).value);
+    if (mi >= 0) void showMonth(mi);
+  });
+  $("#days").addEventListener("change", (e) => {
+    syncStepper();
+    scrollToDay((e.target as HTMLSelectElement).value);
+  });
+  $("#first").addEventListener("click", () => void showMonth(0, "start"));
+  $("#last").addEventListener("click", () =>
+    void showMonth(Math.max(0, state.months.length - 1), "end"),
+  );
 }
 
 async function changeTimezone(): Promise<void> {

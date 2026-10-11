@@ -24,6 +24,7 @@ import {
   isoDate,
   monthOfIsoDate,
   clampSnippet,
+  dayKey,
   splitLinks,
   splitSnippet,
   tsForIsoDate,
@@ -224,4 +225,27 @@ test("prefs: theme system resolves against the OS preference", () => {
   assert.equal(resolveTheme("system", false), "dark");
   assert.equal(resolveTheme("light", false), "light");
   assert.equal(resolveTheme("dark", true), "dark");
+});
+
+// ---------------------------------------------------------------- date keys
+test("dayKey: respects the archive timezone, not the machine's", () => {
+  // 2024-01-05T00:30Z is still 4 January in New York but already the 5th in
+  // Kolkata. Month buckets are built in the archive timezone, so day keys must
+  // match or the day select and the bubbles disagree.
+  const ts = Date.UTC(2024, 0, 5, 0, 30);
+  assert.equal(dayKey(ts, "Asia/Kolkata"), "2024-01-05");
+  assert.equal(dayKey(ts, "America/New_York"), "2024-01-04");
+  assert.equal(dayKey(ts, "UTC"), "2024-01-05");
+});
+
+test("dayKey: falls back to UTC on an invalid timezone", () => {
+  const ts = Date.UTC(2024, 0, 5, 0, 30);
+  assert.equal(dayKey(ts, "Not/AZone"), "2024-01-05");
+});
+
+test("dayKey: is zero-padded so it sorts lexicographically", () => {
+  const jan = dayKey(Date.UTC(2024, 0, 9), "UTC");
+  const feb = dayKey(Date.UTC(2024, 1, 1), "UTC");
+  assert.equal(jan, "2024-01-09");
+  assert.ok(jan < feb);
 });
