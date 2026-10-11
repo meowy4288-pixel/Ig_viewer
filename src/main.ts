@@ -15,8 +15,12 @@ import {
   filterThreads,
   firstIndexAtOrAfter,
   inDisplayOrder,
+  motionEnabled,
   monthOfIsoDate,
+  parsePrefs,
+  resolveTheme,
   tsForIsoDate,
+  type Prefs,
 } from "./logic";
 import { avatarChip, closeLightbox, el, renderMonth, renderSearchHit } from "./ui";
 
@@ -80,52 +84,20 @@ async function boot(): Promise<void> {
 // Unknown keys are ignored and malformed values fall back to the default so a
 // corrupted entry can never leave the UI in an unusable state.
 
-interface Prefs {
-  theme: "dark" | "light" | "system";
-  fontSize: number;
-  density: "cozy" | "compact";
-  motion: boolean;
-  timezone: string;
-}
-
-const DEFAULT_PREFS: Prefs = {
-  theme: "system",
-  fontSize: 15,
-  density: "cozy",
-  motion: true,
-  timezone: "",
-};
-
-function loadPrefs(): Prefs {
-  const base = { ...DEFAULT_PREFS };
-  try {
-    const raw = localStorage.getItem("igv:prefs");
-    if (!raw) return base;
-    const p = JSON.parse(raw) as Partial<Prefs>;
-    if (p.theme === "dark" || p.theme === "light" || p.theme === "system") base.theme = p.theme;
-    if (typeof p.fontSize === "number" && p.fontSize >= 13 && p.fontSize <= 20) {
-      base.fontSize = Math.round(p.fontSize);
-    }
-    if (p.density === "cozy" || p.density === "compact") base.density = p.density;
-    if (typeof p.motion === "boolean") base.motion = p.motion;
-    if (typeof p.timezone === "string" && p.timezone.length <= 64) base.timezone = p.timezone;
-  } catch {
-    /* corrupted prefs: fall back to defaults rather than failing to boot */
-  }
-  return base;
-}
-
 function applyPrefs(p: Prefs): void {
   const root = document.documentElement;
-  // Animations are off if the user turned them off *or* the OS asks for reduced
-  // motion. The settings toggle shows the effective value.
   const prefersLight = window.matchMedia?.("(prefers-color-scheme: light)").matches ?? false;
-  const theme = p.theme === "system" ? (prefersLight ? "light" : "dark") : p.theme;
-  root.classList.toggle("light", theme === "light");
-  root.classList.toggle("compact", p.density === "compact");
   const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-  root.dataset.motion = p.motion && !reduced ? "on" : "off";
+  root.classList.toggle("light", resolveTheme(p.theme, prefersLight) === "light");
+  root.classList.toggle("compact", p.density === "compact");
+  root.dataset.motion = motionEnabled(p, reduced) ? "on" : "off";
   root.style.fontSize = `${p.fontSize}px`;
+}
+
+/** Current effective animation state, so the toggle reflects reality not just intent. */
+function motionIsOn(): boolean {
+  const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  return motionEnabled(prefs, reduced);
 }
 
 function savePrefs(): void {
@@ -146,8 +118,7 @@ function openSettings(open: boolean): void {
   $<HTMLOutputElement>("#set-fs-out").textContent = `${prefs.fontSize}px`;
   // Reflect what is actually applied to <html>, not merely what is stored: if the
   // two ever diverge (e.g. OS reduced-motion overriding) the control must not lie.
-  $<HTMLInputElement>("#set-motion").checked =
-    document.documentElement.dataset.motion === "on";
+  $<HTMLInputElement>("#set-motion").checked = motionIsOn();
   $<HTMLInputElement>("#set-tz").value = prefs.timezone;
   $<HTMLSelectElement>("#set-theme").focus();
 }
@@ -595,7 +566,7 @@ async function changeTimezone(): Promise<void> {
   }
 }
 
-const prefs = loadPrefs();
+const prefs: Prefs = parsePrefs(localStorage.getItem("igv:prefs"));
 applyPrefs(prefs);
 
 try {

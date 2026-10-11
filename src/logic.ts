@@ -216,3 +216,60 @@ export function monthOfIsoDate(iso: string): string | null {
   const m = /^(\d{4})-(\d{2})-\d{2}$/.exec(iso);
   return m ? `${m[1]}-${m[2]}` : null;
 }
+
+// -------------------------------------------------------------------- prefs
+// Pure functions so the settings behaviour is testable. They were previously inline
+// in main.ts, where nothing could verify them.
+
+export type Theme = "dark" | "light" | "system";
+export type Density = "cozy" | "compact";
+
+export interface Prefs {
+  theme: Theme;
+  fontSize: number;
+  density: Density;
+  motion: boolean;
+  timezone: string;
+}
+
+export const DEFAULT_PREFS: Prefs = {
+  theme: "system",
+  fontSize: 15,
+  density: "cozy",
+  motion: true,
+  timezone: "",
+};
+
+/** Parse stored prefs, ignoring anything malformed rather than failing to boot. */
+export function parsePrefs(raw: string | null): Prefs {
+  const base = { ...DEFAULT_PREFS };
+  if (!raw) return base;
+  try {
+    const p = JSON.parse(raw) as Partial<Prefs>;
+    if (p.theme === "dark" || p.theme === "light" || p.theme === "system") base.theme = p.theme;
+    if (typeof p.fontSize === "number" && Number.isFinite(p.fontSize) && p.fontSize >= 13 && p.fontSize <= 20) {
+      base.fontSize = Math.round(p.fontSize);
+    }
+    if (p.density === "cozy" || p.density === "compact") base.density = p.density;
+    if (typeof p.motion === "boolean") base.motion = p.motion;
+    if (typeof p.timezone === "string" && p.timezone.length <= 64) base.timezone = p.timezone;
+  } catch {
+    /* corrupted: keep defaults */
+  }
+  return base;
+}
+
+/** Resolve "system" against what the OS currently reports. */
+export function resolveTheme(theme: Theme, prefersLight: boolean): "light" | "dark" {
+  if (theme === "system") return prefersLight ? "light" : "dark";
+  return theme;
+}
+
+/**
+ * Animations are enabled only if the user wants them AND the OS does not ask for
+ * reduced motion. The settings toggle reflects this *effective* value, so it can
+ * never disagree with what is actually rendered.
+ */
+export function motionEnabled(p: Prefs, prefersReducedMotion: boolean): boolean {
+  return p.motion && !prefersReducedMotion;
+}

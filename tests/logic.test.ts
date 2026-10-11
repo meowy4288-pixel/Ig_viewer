@@ -9,7 +9,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  DEFAULT_PREFS,
   filterThreads,
+  motionEnabled,
+  parsePrefs,
+  resolveTheme,
   firstIndexAtOrAfter,
   inDisplayOrder,
   isAudioKind,
@@ -167,4 +171,57 @@ test("thread filter matches title and key", () => {
   assert.equal(filterThreads(threads, "dev").length, 1);
   assert.equal(filterThreads(threads, "").length, 2);
   assert.equal(filterThreads(threads, "zzz").length, 0);
+});
+
+// ------------------------------------------------------------------ prefs
+test("prefs: missing storage yields defaults", () => {
+  assert.deepEqual(parsePrefs(null), DEFAULT_PREFS);
+});
+
+test("prefs: animations default to on with no stored value", () => {
+  assert.equal(parsePrefs(null).motion, true);
+  assert.equal(motionEnabled(parsePrefs(null), false), true);
+});
+
+test("prefs: user turning animations off is respected", () => {
+  const p = parsePrefs(JSON.stringify({ motion: false }));
+  assert.equal(p.motion, false);
+  assert.equal(motionEnabled(p, false), false);
+});
+
+test("prefs: OS reduced motion overrides the user preference", () => {
+  // This is the case that made the settings toggle appear unchecked by default.
+  const p = parsePrefs(null);
+  assert.equal(motionEnabled(p, false), true);
+  assert.equal(motionEnabled(p, true), false);
+});
+
+test("prefs: corrupted storage falls back instead of throwing", () => {
+  for (const bad of ["", "not json", "[]", "null", '{"motion":"yes"}']) {
+    assert.deepEqual(parsePrefs(bad), DEFAULT_PREFS, `input: ${bad}`);
+  }
+});
+
+test("prefs: out-of-range and wrong-typed fields are ignored", () => {
+  const p = parsePrefs(
+    JSON.stringify({ fontSize: 999, theme: "neon", density: "dense", timezone: "x".repeat(500) }),
+  );
+  assert.equal(p.fontSize, 15);
+  assert.equal(p.theme, "system");
+  assert.equal(p.density, "cozy");
+  assert.equal(p.timezone, "");
+});
+
+test("prefs: valid fields survive alongside invalid ones", () => {
+  const p = parsePrefs(JSON.stringify({ fontSize: 18, theme: "light", motion: false }));
+  assert.equal(p.fontSize, 18);
+  assert.equal(p.theme, "light");
+  assert.equal(p.motion, false);
+});
+
+test("prefs: theme system resolves against the OS preference", () => {
+  assert.equal(resolveTheme("system", true), "light");
+  assert.equal(resolveTheme("system", false), "dark");
+  assert.equal(resolveTheme("light", false), "light");
+  assert.equal(resolveTheme("dark", true), "dark");
 });
