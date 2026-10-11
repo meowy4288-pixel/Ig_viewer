@@ -86,6 +86,78 @@ A working Kotlin SAF bridge was written and is preserved at:
 **`/tmp` may not survive.** If it is gone, `android-app/app/src/main/java/com/igviewer/archive/data/ArchivePicker.kt`
 is the same logic, already written for the native app. Use that one.
 
+## Where the existing work is
+
+Repository root is `/home/kisa/ig-viewer`. Paths are relative to it.
+
+### Rust core to reuse (do not reimplement)
+
+| Path | Lines | Provides |
+|---|---|---|
+| `src-tauri/src/ingest.rs` | ~250 | JSON parsing, dedupe, month bucketing, newest-first ordering |
+| `src-tauri/src/db.rs` | ~600 | SQLite schema, FTS5 search, thread/month queries |
+| `src-tauri/src/zip.rs` | ~230 | Zip extraction, zip-slip/symlink/bomb/file-count guards |
+| `src-tauri/src/protocol.rs` | small | `igmedia:` URL parsing (desktop only, not needed on Android) |
+| `src-tauri/src/lib.rs` | ~720 | Command surface; reference for how the above are wired |
+
+The three files above are what a UniFFI wrapper needs to expose. `ingest.rs` in
+particular already handles the real Instagram format — see its header comment at
+lines 10-16 on newest-first ordering, and `struct Participant { name: String }`
+which matches the real `"participants": [{"name": ...}]`.
+
+### Fixtures — use these for on-device testing
+
+| Path | What |
+|---|---|
+| `fake-data/export/` | Generated fake export tree, 6 threads |
+| `fake-data/expected.json` | Ground truth for parity checking |
+| `tools/gen_fake_data.py` | Regenerates both, deterministic seed 1337 |
+| `tools/parity_check.py` | Compares a live index dump against `expected.json` |
+
+**Known gap:** the generator emits messages oldest-first, real Instagram exports are
+newest-first. `ingest.rs` handles both (documented), but the fixtures therefore never
+exercise the newest-first path. Flipping the generator order turns the tests from
+circular into real evidence. Worth doing on the desktop side.
+
+Threads include `ChatGPT` and `DeepSeek` alongside human chats, with real PNG images
+and real WAV voice notes, so media handling can be checked without a real export.
+
+### Desktop app (other session, do not modify)
+
+| Path | What |
+|---|---|
+| `src/` | TypeScript webview UI — `main.ts`, `ui.ts`, `logic.ts`, `styles.css`, `index.html` |
+| `src-tauri/` | Rust crate for the desktop app |
+| `src-tauri/capabilities/default.json` | The only capability; `core:default` only |
+| `src-tauri/tauri.conf.json` | Strict CSP — do not weaken |
+| `AGENTS.md` | Project hard rules |
+| `AGENTS-ARCHITECTURE.md` | Why the two builds are split, what was removed |
+
+### Docs
+
+| Path | What |
+|---|---|
+| `android-app/HANDOFF.md` | This file |
+| `android-app/README.md` | Architecture rationale, shared-vs-rewritten split, build order |
+| `AGENTS-ARCHITECTURE.md` | Desktop/Android separation and why the Tauri mobile target was removed |
+| `docs/release-verification.md` | Desktop release verification record |
+
+### Preserved but outside the repo
+
+`/tmp/saf-plugin-wip/` — the failed Tauri plugin crate. Contains
+`SafBridge.kt` (working Kotlin, same logic as `ArchivePicker.kt`) and a `lib.rs`
+missing its `build.rs`. Reference only; **`/tmp` will not survive a reboot.**
+
+### Toolchain on this machine
+
+| Thing | Value |
+|---|---|
+| Android SDK | `$HOME/Android/Sdk` (set `ANDROID_HOME` and `ANDROID_SDK_ROOT`) |
+| NDK | `$HOME/Android/Sdk/ndk/26.3.11579264` (set `NDK_HOME`) |
+| Java | `/usr/lib/jvm/java-25-openjdk` (set `JAVA_HOME`) |
+| Build tools | `35.0.0`, platform `android-35` |
+| Rust Android targets | `aarch64-linux-android`, `x86_64-linux-android` installed |
+
 ## What exists now
 
 ```
