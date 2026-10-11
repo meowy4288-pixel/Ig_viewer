@@ -625,6 +625,11 @@ button.img:hover {
   align-items: center;
   gap: 8px;
   color: var(--gilt);
+  border: 1px dashed var(--gilt-dim);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 13px;
+  align-self: flex-start;
 }
 
 /* -------------------------------------------------------- search results */

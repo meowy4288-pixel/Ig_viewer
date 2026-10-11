@@ -70,6 +70,31 @@ function safeHttp(href: string): string | null {
   }
 }
 
+/**
+ * Audio and video cannot be played yet.
+ *
+ * The igmedia: handler serves correct Range/206 responses, but WebKitGTK/GStreamer
+ * will not load a custom URI scheme for <audio>/<video> -- only http(s). Rendering
+ * the native player therefore shows a broken "Error" control. Until media transport
+ * is fixed (loopback server or blob:), say so plainly instead of shipping a control
+ * that cannot work. Flip this once CSP allows it.
+ */
+const MEDIA_PLAYBACK_AVAILABLE = false;
+
+function player(tag: "audio" | "video", url: string): HTMLElement {
+  const p = document.createElement(tag);
+  p.controls = true;
+  p.preload = "none";
+  p.src = url;
+  return p;
+}
+
+/** Honest placeholder: names the kind and says why it will not play. */
+function mediaStub(kind: string): HTMLElement {
+  const label = kind === "audio" ? "Voice note" : kind === "video" ? "Video" : kind;
+  return el("div", "voice", `\u25C0 ${label} \u00b7 playback not available yet`);
+}
+
 /** Render one media reference. Returns null when it cannot be shown. */
 export function renderMedia(m: UiMedia): HTMLElement | null {
   if (!m.available || !isSafeMediaUrl(m.url)) {
@@ -89,19 +114,11 @@ export function renderMedia(m: UiMedia): HTMLElement | null {
     }
     return img;
   }
-  if (isVideoKind(m.kind)) {
-    const v = document.createElement("video");
-    v.controls = true;
-    v.preload = "metadata";
-    v.src = url;
-    return v;
-  }
   if (isAudioKind(m.kind)) {
-    const a = document.createElement("audio");
-    a.controls = true;
-    a.preload = "none";
-    a.src = url;
-    return a;
+    return MEDIA_PLAYBACK_AVAILABLE ? player("audio", url) : mediaStub("audio");
+  }
+  if (isVideoKind(m.kind)) {
+    return MEDIA_PLAYBACK_AVAILABLE ? player("video", url) : mediaStub("video");
   }
   return el("div", "dim", `(${m.kind} cannot be previewed)`);
 }

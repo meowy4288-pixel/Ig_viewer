@@ -545,7 +545,17 @@ async function showMonth(index: number, where: "start" | "end" | "focus" = "star
 
   $("#hname").textContent = state.threadTitle;
   $("#hav").textContent = (state.threadTitle.trim()[0] ?? "?").toUpperCase();
-  $("#hsub").textContent = `${state.messages.length} messages in ${bucket.key}`;
+  // Thread-level totals, so the header answers "what is this chat" rather than
+  // repeating the month that is already shown in the date controls.
+  const total = state.threads.find((t) => t.key === state.threadKey)?.message_count ??
+    state.messages.length;
+  const first = state.months[0]?.key;
+  const last = state.months[state.months.length - 1]?.key;
+  const range = first && last
+    ? `${monthLabel(first)} \u2013 ${monthLabel(last)}`
+    : bucket.key;
+  $("#hsub").textContent =
+    `${total} message${total === 1 ? "" : "s"} \u00b7 ${range}`;
 
   const box = $("#msgs");
   box.hidden = false;
