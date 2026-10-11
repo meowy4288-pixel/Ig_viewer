@@ -427,14 +427,22 @@ function renderMeButton(): void {
 
 /** Open the participant chooser overlay. */
 async function chooseMe(): Promise<void> {
-  const box = $<HTMLElement>("#whobtns");
-  box.replaceChildren();
+  const box = $<HTMLElement>("#whopick");
+  // Nothing to ask when there is no other side: every message is trivially ours.
+  if (state.participants.length < 2) {
+    box.hidden = true;
+    state.me = state.participants[0] ?? "";
+    renderMeButton();
+    return;
+  }
+  const btns = $<HTMLElement>("#whobtns");
+  btns.replaceChildren();
   for (const who of state.participants) {
     const b = el("button", who === state.me ? "primary" : "", who);
     b.dataset.who = who;
-    box.append(b);
+    btns.append(b);
   }
-  $<HTMLElement>("#whopick").hidden = false;
+  box.hidden = false;
 }
 
 /** "9 Oct 2026" — compact and unambiguous enough for a list row. */
@@ -492,9 +500,12 @@ async function openThread(key: string): Promise<void> {
   state.participants = data.participants;
   state.months = data.months;
 
+  // Pre-select the last choice so it is one click, but always ask: a two-person
+  // chat reads wrong until you say which side is yours, the way messaging apps do.
   const saved = localStorage.getItem(`igv:me:${key}`) ?? "";
   state.me = state.participants.includes(saved) ? saved : "";
   renderMeButton();
+  void chooseMe();
 
   const months = $<HTMLSelectElement>("#months");
   months.replaceChildren();
@@ -678,6 +689,9 @@ function wire(): void {
   $("#next").addEventListener("click", () => void stepDay(1));
   $("#q").addEventListener("input", (e) => void runSearch((e.target as HTMLInputElement).value));
   $("#me").addEventListener("click", () => void chooseMe());
+  $("#whopick").addEventListener("click", (e) => {
+    if (e.target === $("#whopick")) $<HTMLElement>("#whopick").hidden = true;
+  });
   window.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       closeLightbox();
