@@ -56,7 +56,6 @@
           <input id="set-tz" type="text" placeholder="Europe/Warsaw" size="18" />
         </label>
         <hr />
-        <button id="pick" type="button">Choose export folder&hellip;</button>
         <button id="pickzip" type="button">Choose .zip export&hellip;</button>
         <button id="delete" class="danger" type="button" hidden>Delete index</button>
         <footer>Stored locally. No network, no accounts, no telemetry.</footer>
@@ -88,12 +87,12 @@
         </svg>
         <h2>Open your archive</h2>
         <p>
-          Choose your Instagram export, either the unzipped folder or the .zip.
-          Everything stays on this computer &ndash; the app makes no network requests.
+          Open the <code>.zip</code> you downloaded from Instagram, or point at the
+          extracted folder below. Everything stays on this computer &ndash; the app
+          makes no network requests.
         </p>
         <div class="import">
           <div class="who" style="justify-content: stretch">
-            <button id="pick2" type="button" style="flex: 1">Choose folder&hellip;</button>
             <button id="pickzip2" type="button" style="flex: 1">Choose .zip&hellip;</button>
           </div>
           <input id="root" type="text" placeholder="&hellip;or paste the folder path" />

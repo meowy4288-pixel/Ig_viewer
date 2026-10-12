@@ -155,31 +155,6 @@ async function onPickZip(): Promise<void> {
   }
 }
 
-async function onPick(): Promise<void> {
-  status("Waiting for the folder picker\u2026");
-  let raw: string | null;
-  try {
-    raw = await invoke<string | null>("pick_export_folder");
-  } catch (err) {
-    status(`Could not open the folder picker (${String(err)}).`);
-    return;
-  }
-  if (!raw) {
-    status("Folder selection cancelled.");
-    return;
-  }
-  const { archive_id: id, export_root } = JSON.parse(raw) as {
-    archive_id: string;
-    export_root: string;
-  };
-  localStorage.setItem("igv:lastArchive", id);
-  // doIndex reads #root, so the picked path has to land there first. Without
-  // this it bailed out with "type the export folder path first" and the user
-  // saw nothing happen after choosing a folder.
-  $<HTMLInputElement>("#root").value = export_root;
-  await attach(id);
-  await doIndex(export_root);
-}
 
 async function attach(id: string): Promise<void> {
   state.id = id;
@@ -654,9 +629,7 @@ async function doDeleteIndex(): Promise<void> {
 // ------------------------------------------------------------- wiring
 
 function wire(): void {
-  $("#pick").addEventListener("click", () => void onPick());
   $("#pickzip").addEventListener("click", () => void onPickZip());
-  $("#pick2").addEventListener("click", () => void onPick());
   $("#pickzip2").addEventListener("click", () => void onPickZip());
   $("#whobtns").addEventListener("click", (e) => {
     const b = (e.target as HTMLElement).closest("button");

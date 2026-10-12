@@ -12,7 +12,7 @@ pub mod zip;
 
 use std::path::{Path, PathBuf};
 
-use picker::{pick_folder_native, pick_zip_native};
+use picker::pick_zip_native;
 
 /// Archives dir: `<app_data_dir>/archives`. One DB per archive.
 fn archives_dir<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
@@ -38,28 +38,6 @@ fn system_tz() -> (String, bool) {
 #[tauri::command]
 fn app_info() -> String {
     format!("ig-viewer {}", env!("CARGO_PKG_VERSION"))
-}
-
-/// Pick an export folder. Native dialog via rfd, so no capability is needed.
-///
-/// rfd has no Android backend (it covers macOS, Windows, wasm and *nix only), so on
-/// Android this reports `picker-unavailable` rather than failing to compile. Android
-/// folder access needs the Storage Access Framework, which yields a `content://` URI
-/// rather than a path -- see the notes in `scan.rs`.
-#[tauri::command]
-async fn pick_export_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    let picked = pick_folder_native("Select your unzipped Instagram export folder")
-        .ok_or_else(|| "picker-unavailable".to_string())?;
-    let dir = archives_dir(&app)?;
-    let id = new_archive_id();
-    let (tz, fell_back) = system_tz();
-    let conn = db::open(&dir, &id, &picked, &tz)?;
-    drop(conn);
-    Ok(Some(
-        serde_json::json!({ "archive_id": id, "export_root": picked, "timezone": tz,
-                                 "timezone_fallback": fell_back })
-        .to_string(),
-    ))
 }
 
 /// Copy the bundled fake export out of the APK assets on first run.
@@ -622,7 +600,6 @@ pub fn run() {
         .register_asynchronous_uri_scheme_protocol("igmedia", igmedia_handler)
         .invoke_handler(tauri::generate_handler![
             app_info,
-            pick_export_folder,
             pick_export_zip,
             extract_export,
             index_archive,

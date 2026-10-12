@@ -61,10 +61,6 @@ impl FolderPicker for StubFolderPicker {
 /// current thread inside a live reactor, so `zbus` sees one, and it is always the
 /// same one across calls. This stays synchronous, which is fine -- Tauri commands
 /// may block, and a modal dialog is work the app has nothing else to do during.
-pub fn pick_folder_native(title: &str) -> Option<PathBuf> {
-    rfd::FileDialog::new().set_title(title).pick_folder()
-}
-
 /// Show the platform file chooser for a `.zip`.
 ///
 /// No extension filter: with the GTK backend the filtered dialog did not open at
