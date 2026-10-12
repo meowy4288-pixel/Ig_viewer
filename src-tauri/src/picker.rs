@@ -65,10 +65,11 @@ pub fn pick_folder_native(title: &str) -> Option<PathBuf> {
     rfd::FileDialog::new().set_title(title).pick_folder()
 }
 
-/// Show the platform file chooser, restricted to `.zip`.
+/// Show the platform file chooser for a `.zip`.
+///
+/// No extension filter: with the GTK backend the filtered dialog did not open at
+/// all, while the unfiltered one works. The filter bought nothing anyway -- doIndex
+/// refuses any path that does not end in `.zip` before touching it.
 pub fn pick_zip_native(title: &str) -> Option<PathBuf> {
-    rfd::FileDialog::new()
-        .set_title(title)
-        .add_filter("Instagram export", &["zip"])
-        .pick_file()
+    rfd::FileDialog::new().set_title(title).pick_file()
 }

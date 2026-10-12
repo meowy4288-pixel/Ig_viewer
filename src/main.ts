@@ -148,7 +148,7 @@ async function onPickZip(): Promise<void> {
     localStorage.setItem("igv:lastArchive", res.archive_id);
     await attach(res.archive_id);
     $<HTMLInputElement>("#root").value = res.export_root;
-    await doIndex();
+    await doIndex(res.export_root);
     status(`Extracted ${res.files} files${res.rejected ? ` (${res.rejected} unsafe entries skipped)` : ""}.`);
   } catch (err) {
     status(`Extraction failed (${String(err)}).`);
@@ -168,10 +168,17 @@ async function onPick(): Promise<void> {
     status("Folder selection cancelled.");
     return;
   }
-  const { archive_id: id } = JSON.parse(raw) as { archive_id: string };
+  const { archive_id: id, export_root } = JSON.parse(raw) as {
+    archive_id: string;
+    export_root: string;
+  };
   localStorage.setItem("igv:lastArchive", id);
+  // doIndex reads #root, so the picked path has to land there first. Without
+  // this it bailed out with "type the export folder path first" and the user
+  // saw nothing happen after choosing a folder.
+  $<HTMLInputElement>("#root").value = export_root;
   await attach(id);
-  await doIndex();
+  await doIndex(export_root);
 }
 
 async function attach(id: string): Promise<void> {
