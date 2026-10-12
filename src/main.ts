@@ -631,8 +631,13 @@ async function doDeleteIndex(): Promise<void> {
     $("#reimport").hidden = true;
     $("#list").replaceChildren();
     $("#msgs").replaceChildren();
+    $("#latestf").hidden = true;
     state.id = "";
     state.threads = [];
+    // Bring the import screen back. Hiding the chrome without restoring it
+    // left the app with nothing clickable at all.
+    $("#welcome").hidden = false;
+    $("#msgs").hidden = true;
     status("Index deleted. The export folder is untouched.");
   } catch (err) {
     status(`Could not delete the index: ${String(err)}`);
