@@ -183,6 +183,8 @@ async function attach(id: string): Promise<void> {
   // pointing at an archive that no longer exists.
   const live = state.threads.length > 0;
   $("#delete").hidden = !live;
+  $("#reimport").hidden = !live;
+  $("#deletequick").hidden = !live;
   $("#toolbar").hidden = !live;
 }
 
@@ -258,8 +260,12 @@ async function doIndex(prefilledRoot?: string): Promise<void> {
     if (summary.archive_id && summary.archive_id !== state.id) {
       state.id = summary.archive_id;
       localStorage.setItem("igv:lastArchive", state.id);
+    }
+    if (state.id !== "") {
       $("#toolbar").hidden = false;
       $("#delete").hidden = false;
+      $("#reimport").hidden = false;
+      $("#deletequick").hidden = false;
     }
     if (summary.threads === 0) {
       // Almost always the wrong folder. Say what was expected rather than
@@ -621,6 +627,8 @@ async function doDeleteIndex(): Promise<void> {
     localStorage.removeItem("igv:lastArchive");
     $("#toolbar").hidden = true;
     $("#delete").hidden = true;
+    $("#deletequick").hidden = true;
+    $("#reimport").hidden = true;
     $("#list").replaceChildren();
     $("#msgs").replaceChildren();
     state.id = "";
@@ -694,6 +702,17 @@ function wire(): void {
   });
   $("#index").addEventListener("click", () => void doIndex());
   $("#delete").addEventListener("click", () => void doDeleteIndex());
+  // The same two actions, always reachable from the sidebar footer rather than
+  // only from behind the settings popover.
+  $("#deletequick").addEventListener("click", () => void doDeleteIndex());
+  $("#reimport").addEventListener("click", () => {
+    const w = $<HTMLElement>("#welcome");
+    w.hidden = false;
+    $("#msgs").hidden = true;
+    $("#toolbar").hidden = true;
+    $("#latestf").hidden = true;
+    status("Choose a different archive folder or .zip.");
+  });
   $("#filter").addEventListener("input", () => renderThreadList());
   $("#prev").addEventListener("click", () => void stepDay(-1));
   $("#next").addEventListener("click", () => void stepDay(1));

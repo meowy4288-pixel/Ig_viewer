@@ -18,7 +18,13 @@
         <input id="filter" type="search" placeholder="Filter chats&hellip;" aria-label="Filter chats" />
       </div>
       <div class="chats" id="list"></div>
-      <div class="side-foot" id="foot">No archive loaded</div>
+      <div class="side-foot">
+        <span id="foot">No archive loaded</span>
+        <div class="foot-actions">
+          <button id="reimport" class="ghost" type="button" hidden>Open another archive&hellip;</button>
+          <button id="deletequick" class="ghost danger" type="button" hidden>Delete index</button>
+        </div>
+      </div>
 
       <div class="pop" id="settings" hidden>
         <h3>Settings</h3>

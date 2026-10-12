@@ -210,10 +210,28 @@ fn push_refs(out: &mut Vec<MediaRef>, kind: &str, items: Option<&[MediaItem]>) {
     }
 }
 
+/// Decode a message file to text, tolerating a BOM and non-UTF-8 bytes.
+///
+/// Instagram exports are not reliably UTF-8: a single non-UTF-8 byte in one
+/// message file used to throw and drop the entire thread. Decoding Latin-1 as a
+/// fallback yields exactly the U+0080..U+00FF range that `text::fix` is built to
+/// repair, so the existing mojibake handling still applies downstream.
+///
+/// Decode EARLY, before serde and before any normalisation: if this ran after
+/// normalisation there would be nothing left for `fix` to repair.
+fn decode_message_file(bytes: &[u8]) -> Result<String, String> {
+    let body = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(bytes);
+    match std::str::from_utf8(body) {
+        Ok(s) => Ok(s.to_string()),
+        // Latin-1 never fails, so this is total for arbitrary bytes.
+        Err(_) => Ok(body.iter().map(|b| char::from(*b)).collect()),
+    }
+}
+
 /// Parse one file's bytes into a `ThreadFile`.
 pub fn parse_thread_file(bytes: &[u8]) -> Result<ThreadFile, String> {
-    let text = std::str::from_utf8(bytes).map_err(|_| "invalid-utf8".to_string())?;
-    serde_json::from_str(text).map_err(|_| "malformed-json".to_string())
+    let text = decode_message_file(bytes)?;
+    serde_json::from_str(&text).map_err(|_| "malformed-json".to_string())
 }
 
 /// Apply the canonical dedupe and display order to one thread.
@@ -387,5 +405,49 @@ mod tests {
             "differing reactions must not split the key"
         );
         assert_eq!(t.dropped.len(), 1);
+    }
+}
+
+#[cfg(test)]
+mod decode_tests {
+    use super::*;
+
+    #[test]
+    fn plain_utf8_round_trips() {
+        let f = parse_thread_file(br#"{"messages":[],"participants":[]}"#).unwrap();
+        assert_eq!(f.messages.len(), 0);
+    }
+
+    #[test]
+    fn bom_prefixed_file_parses() {
+        let mut b = vec![0xEF, 0xBB, 0xBF];
+        b.extend_from_slice(br#"{"messages":[],"participants":[]}"#);
+        assert!(parse_thread_file(&b).is_ok(), "BOM should be stripped");
+    }
+
+    #[test]
+    fn non_utf8_bytes_fall_back_to_latin1_instead_of_dropping_the_thread() {
+        // 0xE9 is e-acute in Latin-1 and invalid UTF-8 on its own.
+        let raw = b"{\"messages\":[{\"sender_name\":\"caf\xe9\"}],\"participants\":[]}";
+        let f = parse_thread_file(raw);
+        assert!(f.is_ok(), "a single bad byte must not drop the thread");
+        assert_eq!(f.unwrap().messages[0].sender_name, "caf\u{e9}");
+    }
+
+    #[test]
+    fn latin1_fallback_produces_the_range_text_fix_repairs() {
+        // Latin-1 maps every byte to U+0080..U+00FF, which is what text::fix
+        // repairs back to UTF-8. If this ever changes, fix() stops matching.
+        let decoded = decode_message_file(&[0xC3, 0xA9]).unwrap();
+        assert!(decoded.chars().all(|c| ('\u{80}'..='\u{FF}').contains(&c)));
+    }
+
+    #[test]
+    fn still_reports_malformed_json_rather_than_guessing() {
+        // Decoding is tolerant; parsing is not. Truncated files must still fail.
+        assert_eq!(
+            parse_thread_file(b"{\"messages\":[{\"a\":1").unwrap_err(),
+            "malformed-json"
+        );
     }
 }

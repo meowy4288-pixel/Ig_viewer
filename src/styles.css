@@ -730,3 +730,22 @@ dialog::backdrop {
   animation: none !important;
   transition: none !important;
 }
+
+
+/* Footer actions: keep re-import and delete reachable without opening Settings. */
+.foot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.foot-actions button {
+  font-size: 13px;
+  padding: 4px 8px;
+}
+.foot-actions button.ghost:hover {
+  background: var(--stone);
+}
+button.ghost.danger:hover {
+  color: var(--blood);
+}
