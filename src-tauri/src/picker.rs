@@ -70,17 +70,29 @@ pub fn pick_zip_native(title: &str) -> Option<PathBuf> {
     })
 }
 
-/// Run `f` with Tauri's Tokio runtime entered on this thread.
+/// Run `f` inside the CURRENT Tokio runtime, if there is one.
 ///
-/// If we are already inside a runtime, `enter` is a no-op. If not, borrow the
-/// handle from the context the async command established. Falls back to running
-/// bare only if neither is available, which is the case that used to panic.
+/// Four attempts, each fixing the previous failure mode:
+///
+/// 1. sync command, no runtime entered  -> panic, "there is no reactor running"
+/// 2. sync command, fresh runtime/call  -> opens, then hangs: zbus binds its
+///    connection to the reactor it was spawned on
+/// 3. async command, fresh runtime/call -> opens, never resolves
+/// 4. THIS: async command (so Tauri runs it INSIDE its runtime) plus the
+///    blocking picker with that same runtime merely ENTERED
+///
+/// The guard must outlive `f`, otherwise the thread stops being inside the reactor
+/// before the picker runs. The blocking form is deliberate: the portal resolves via
+/// D-Bus while the dialog is up, and awaiting rfd's own future deadlocks against the
+/// modal it just opened.
 fn with_reactor<T>(f: impl FnOnce() -> Option<T>) -> Option<T> {
-    if tokio::runtime::Handle::try_current().is_ok() {
-        return f();
-    }
-    // Outside a runtime there is nothing to enter; take the blocking path and let
-    // it fail loudly in the log rather than silently returning None.
-    log::warn!("no Tokio runtime in scope for the file picker; zbus may fail");
+    let Ok(handle) = tokio::runtime::Handle::try_current() else {
+        log::error!(
+            "file picker called outside a Tokio runtime; zbus will panic. \
+             The command must be async so Tauri runs it on its runtime."
+        );
+        return None;
+    };
+    let _guard = handle.enter();
     f()
 }
