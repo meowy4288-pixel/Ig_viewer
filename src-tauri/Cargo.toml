@@ -34,6 +34,7 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 
 # rfd covers the desktop pickers (macOS/Windows/*nix). Android is a separate native
 # app under android-app/, so this crate no longer carries any mobile target cfg.
+tokio = { version = "1", default-features = false, features = ["rt"] }
 rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "tokio"] }
 
 [dev-dependencies]

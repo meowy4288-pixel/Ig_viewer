@@ -47,9 +47,8 @@ fn app_info() -> String {
 /// folder access needs the Storage Access Framework, which yields a `content://` URI
 /// rather than a path -- see the notes in `scan.rs`.
 #[tauri::command]
-async fn pick_export_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
+fn pick_export_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
     let picked = pick_folder_native("Select your unzipped Instagram export folder")
-        .await
         .ok_or_else(|| "picker-unavailable".to_string())?;
     let dir = archives_dir(&app)?;
     let id = new_archive_id();
@@ -83,8 +82,8 @@ async fn pick_export_folder(app: tauri::AppHandle) -> Result<Option<String>, Str
 /// Pick an Instagram `.zip` export. Returns the chosen path; the webview only ever
 /// sees it long enough to hand straight back to `extract_export`.
 #[tauri::command]
-async fn pick_export_zip(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    let picked = pick_zip_native("Select your Instagram .zip export").await;
+fn pick_export_zip(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let picked = pick_zip_native("Select your Instagram .zip export");
     let _ = &app;
     // Non-UTF-8 paths cannot cross the IPC boundary as a String; report that
     // rather than silently returning nothing.

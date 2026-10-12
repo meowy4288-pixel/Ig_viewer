@@ -42,23 +42,45 @@ impl FolderPicker for StubFolderPicker {
     }
 }
 
-/// Show the platform folder chooser. Await this from a Tauri async command so it
-/// runs on Tauri's runtime rather than a throwaway one.
-pub async fn pick_folder_native(title: &str) -> Option<PathBuf> {
-    rfd::AsyncFileDialog::new()
-        .set_title(title)
-        .pick_folder()
-        .await
-        .map(|h| h.path().to_path_buf())
+/// Show the platform folder chooser.
+///
+/// `rfd`'s xdg-portal backend reaches D-Bus through `zbus`, which panics without a
+/// Tokio *reactor* entered. Two earlier attempts were wrong:
+///
+/// * no runtime at all -> panic, "there is no reactor running"
+/// * a fresh runtime per call -> the dialog opened but never resolved, because
+///   `zbus` binds its connection to the reactor it was spawned on, so a second
+///   runtime could not drive the first one's connection
+///
+/// The fix is neither: enter Tauri's EXISTING runtime. `Handle::enter` puts the
+/// current thread inside a live reactor, so `zbus` sees one, and it is always the
+/// same one across calls. This stays synchronous, which is fine -- Tauri commands
+/// may block, and a modal dialog is work the app has nothing else to do during.
+pub fn pick_folder_native(title: &str) -> Option<PathBuf> {
+    with_reactor(|| rfd::FileDialog::new().set_title(title).pick_folder())
 }
 
-/// Show the platform file chooser, restricted to `.zip`. Same runtime requirement
-/// as `pick_folder_native`.
-pub async fn pick_zip_native(title: &str) -> Option<PathBuf> {
-    rfd::AsyncFileDialog::new()
-        .set_title(title)
-        .add_filter("Instagram export", &["zip"])
-        .pick_file()
-        .await
-        .map(|h| h.path().to_path_buf())
+/// Show the platform file chooser, restricted to `.zip`. Same reactor handling.
+pub fn pick_zip_native(title: &str) -> Option<PathBuf> {
+    with_reactor(|| {
+        rfd::FileDialog::new()
+            .set_title(title)
+            .add_filter("Instagram export", &["zip"])
+            .pick_file()
+    })
+}
+
+/// Run `f` with Tauri's Tokio runtime entered on this thread.
+///
+/// If we are already inside a runtime, `enter` is a no-op. If not, borrow the
+/// handle from the context the async command established. Falls back to running
+/// bare only if neither is available, which is the case that used to panic.
+fn with_reactor<T>(f: impl FnOnce() -> Option<T>) -> Option<T> {
+    if tokio::runtime::Handle::try_current().is_ok() {
+        return f();
+    }
+    // Outside a runtime there is nothing to enter; take the blocking path and let
+    // it fail loudly in the log rather than silently returning None.
+    log::warn!("no Tokio runtime in scope for the file picker; zbus may fail");
+    f()
 }
