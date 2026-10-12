@@ -4,18 +4,23 @@
 //! needs no `dialog:allow-open` capability and `capabilities/default.json` stays
 //! untouched.
 //!
-//! # Why async
+//! # Why the GTK backend, not the portal
 //!
-//! `rfd`'s xdg-portal backend reaches D-Bus through `zbus`, which panics with
-//! "there is no reactor running, must be called from the context of a Tokio 1.x
-//! runtime" unless a reactor is entered. The panic happens in a function that
-//! cannot unwind, so it aborts the whole process rather than returning an error.
+//! Five attempts were made at this picker on rfd's xdg-portal backend. All failed,
+//! and the reason is structural: the portal talks D-Bus through `zbus`, which needs
+//! a Tokio reactor *entered*, and a Tauri command has none.
 //!
-//! These are therefore `async` and must be awaited from a Tauri async command,
-//! which Tauri runs on its own Tokio runtime. Do NOT spin up a `Runtime` per call:
-//! `zbus` binds its connection to the reactor it was spawned on, so a second,
-//! separate runtime cannot reuse the first one's connection and the dialog hangs
-//! or dies.
+//! 1. sync command, no reactor entered  -> panic, "there is no reactor running"
+//! 2. sync command, fresh runtime/call  -> dialog opens, then hangs: `zbus` binds
+//!    its connection to the reactor it was spawned on
+//! 3. async command, fresh runtime/call -> opens, never resolves
+//! 4. async command, existing runtime entered, blocking picker -> deadlocks: the
+//!    blocking call holds the thread the reactor needs to drive the portal reply
+//!
+//! The GTK backend has no D-Bus and no reactor, so the entire class of problem
+//! disappears. Nothing is lost that mattered: the portal sandbox only limited which
+//! paths a chooser could hand back, and this app already reads the user's export
+//! after they point at it.
 
 use std::path::PathBuf;
 
@@ -57,42 +62,13 @@ impl FolderPicker for StubFolderPicker {
 /// same one across calls. This stays synchronous, which is fine -- Tauri commands
 /// may block, and a modal dialog is work the app has nothing else to do during.
 pub fn pick_folder_native(title: &str) -> Option<PathBuf> {
-    with_reactor(|| rfd::FileDialog::new().set_title(title).pick_folder())
+    rfd::FileDialog::new().set_title(title).pick_folder()
 }
 
-/// Show the platform file chooser, restricted to `.zip`. Same reactor handling.
+/// Show the platform file chooser, restricted to `.zip`.
 pub fn pick_zip_native(title: &str) -> Option<PathBuf> {
-    with_reactor(|| {
-        rfd::FileDialog::new()
-            .set_title(title)
-            .add_filter("Instagram export", &["zip"])
-            .pick_file()
-    })
-}
-
-/// Run `f` inside the CURRENT Tokio runtime, if there is one.
-///
-/// Four attempts, each fixing the previous failure mode:
-///
-/// 1. sync command, no runtime entered  -> panic, "there is no reactor running"
-/// 2. sync command, fresh runtime/call  -> opens, then hangs: zbus binds its
-///    connection to the reactor it was spawned on
-/// 3. async command, fresh runtime/call -> opens, never resolves
-/// 4. THIS: async command (so Tauri runs it INSIDE its runtime) plus the
-///    blocking picker with that same runtime merely ENTERED
-///
-/// The guard must outlive `f`, otherwise the thread stops being inside the reactor
-/// before the picker runs. The blocking form is deliberate: the portal resolves via
-/// D-Bus while the dialog is up, and awaiting rfd's own future deadlocks against the
-/// modal it just opened.
-fn with_reactor<T>(f: impl FnOnce() -> Option<T>) -> Option<T> {
-    let Ok(handle) = tokio::runtime::Handle::try_current() else {
-        log::error!(
-            "file picker called outside a Tokio runtime; zbus will panic. \
-             The command must be async so Tauri runs it on its runtime."
-        );
-        return None;
-    };
-    let _guard = handle.enter();
-    f()
+    rfd::FileDialog::new()
+        .set_title(title)
+        .add_filter("Instagram export", &["zip"])
+        .pick_file()
 }
