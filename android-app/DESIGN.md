@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>IG Archive – Android v1</title>
+<style>
+/* Minimal: system fonts only (Noto Serif / Roboto on Android), flat surfaces, true-black base for OLED, no looping animation. */
+:root{
+  color-scheme:dark;
+  --bg:#000;--surface:#141414;--line:#2b2b2b;
+  --accent:#ececec;--on-accent:#000;--accent-dim:#2e2e2e;--gilt:#c4c4c4;
+  --text:#f2f2f2;--muted:#8a8a8a;
+  --serif:"Noto Serif","Palatino Linotype",Georgia,serif;
+  --sans:Roboto,"Segoe UI",system-ui,sans-serif;
+  --pad:8px;
+}
+[data-density="compact"]{--pad:5px}
+[data-theme="light"]{color-scheme:light;--bg:#fff;--surface:#f1f1f1;--line:#d9d9d9;--accent:#000;--on-accent:#fff;--accent-dim:#e2e2e2;--gilt:#444;--text:#000;--muted:#666}
+[hidden]{display:none !important}
+*{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:#000}
+body{font:16px/1.45 var(--sans);color:var(--text)}
+#app{container-type:inline-size;position:relative;max-width:430px;height:100dvh;margin:0 auto;background:var(--bg);overflow:hidden}
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+button,input,select{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:10px;min-height:44px;padding:0 14px}
+button{cursor:pointer}
+button:active{background:var(--line)}
+:is(button,input,select):focus-visible{outline:2px solid var(--gilt);outline-offset:1px}
+input::placeholder{color:var(--muted)}
+.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+button:disabled{opacity:.4;cursor:not-allowed}
+.icon{width:48px;min-height:48px;padding:0;border:0;background:transparent;font-size:20px;border-radius:50%}
+.danger{border-color:var(--text)}
+
+/* app bar */
+.bar{display:flex;align-items:center;gap:4px;min-height:56px;padding:0 4px 0 8px;border-bottom:1px solid var(--line)}
+.bar h1{flex:1;font:600 22px var(--serif);color:var(--gilt);padding-left:8px}
+.bar .t{flex:1;min-width:0}.bar b{display:block;font:600 17px/1.2 var(--serif)}.bar small{color:var(--muted);font-size:12px}
+.scroll{flex:1;overflow:auto;overscroll-behavior:contain}
+
+/* chat list */
+.row{display:flex;gap:14px;align-items:center;padding:calc(var(--pad) + 4px) 16px;min-height:72px}
+.row:active{background:var(--surface)}
+.arch{width:36px;height:44px;flex:none;border-radius:999px 999px 4px 4px;background:var(--accent-dim);display:grid;place-items:center;font:600 17px var(--serif);border:1px solid var(--gilt)}
+.bar .arch{width:30px;height:36px;font-size:15px}
+.row .meta{flex:1;min-width:0}
+.row b{display:flex;justify-content:space-between;font-weight:500}
+.row b span{font-size:12px;color:var(--muted);font-weight:400}
+.row small{display:block;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* date strip: year / month / day always visible */
+.strip{position:relative;display:flex;gap:6px;align-items:center;padding:6px 8px;border-bottom:1px solid var(--line)}
+.strip select{flex:1;min-width:0;padding:0 6px;min-height:40px}
+.strip button{min-height:40px;width:40px;padding:0}
+.strip .sel{display:flex;flex:1;gap:6px;min-width:0}
+.strip .chipwrap{display:none;position:relative;flex:1;min-width:0}
+.datechip{display:grid;place-items:center;min-height:40px;border:1px solid var(--line);border-radius:10px;background:var(--surface);font-weight:500}
+.chipwrap input{position:absolute;inset:0;width:100%;height:100%;opacity:0;min-height:0;padding:0}
+@container (max-width:419px){.strip .sel{display:none}.strip .chipwrap{display:block}}
+
+/* messages */
+.msgs{padding:8px 12px 88px}
+.day{text-align:center;color:var(--gilt);font:italic 14px var(--serif);margin:18px 0 8px}
+.msg{width:fit-content;max-width:80%;margin:10px 0 0;padding:calc(var(--pad) + 1px) 12px;background:var(--surface);border-radius:18px 18px 18px 4px;overflow-wrap:anywhere}
+.msg.me{margin-left:auto;background:var(--accent);color:var(--on-accent);border-radius:18px 18px 4px 18px}
+.msg.g-prev{margin-top:2px}
+.msg.g-prev:not(.me){border-top-left-radius:6px}.msg.g-prev.me{border-top-right-radius:6px}
+.msg.g-next:not(.me){border-bottom-left-radius:6px}.msg.g-next.me{border-bottom-right-radius:6px}
+.msg time{display:block;font-size:11px;color:var(--muted);margin-top:1px}.msg.me time{color:inherit;opacity:.6}
+.msg.me .voice{color:inherit}
+.sender{display:block;font:500 12px var(--sans);color:var(--gilt)}
+.msg.unsent{background:transparent;border:1px dashed var(--line);color:var(--muted);font-style:italic}
+.react{display:flex;gap:4px;margin-top:4px}
+.react span{color:var(--text);font-size:12px;padding:0 8px;border-radius:999px;background:var(--bg);border:1px solid var(--line)}
+.msg.flash{outline:3px solid var(--text);outline-offset:3px}
+.whoami{margin:6px 8px 0;min-height:36px;font-size:13px;color:var(--muted);border-style:dashed}
+.sys{width:fit-content;margin:14px auto;padding:2px 14px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:13px}
+.voice{color:var(--gilt)}
+button.img{display:grid;place-items:center;width:220px;max-width:100%;aspect-ratio:4/3;background:var(--bg);color:var(--muted);font-size:13px;border-radius:12px}
+.fabs{position:absolute;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px}
+.fab{width:48px;min-height:48px;padding:0;border-radius:50%;background:var(--accent);color:var(--on-accent);border:0;box-shadow:0 4px 14px #000a;transition:opacity .18s,transform .18s}
+.fab.off{opacity:0;transform:scale(.8);pointer-events:none}
+.fab.sm{background:var(--surface);color:var(--text);border:1px solid var(--line)}
+
+/* search + results */
+.sbar{display:flex;gap:6px;align-items:center;padding:6px 8px;border-bottom:1px solid var(--line)}
+.sbar input{flex:1;border-radius:999px;padding:0 16px}
+.hit{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;padding:12px 16px}
+.hit b{font:600 16px var(--serif);color:var(--gilt)}.hit small{color:var(--muted);margin-left:8px}
+mark{background:var(--text);color:var(--bg);border-radius:3px;padding:0 2px}
+.empty{padding:40px 24px;text-align:center;color:var(--muted)}
+
+/* settings */
+.set{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 16px;min-height:56px;border-bottom:1px solid var(--line)}
+.set select,.set input[type=text]{width:150px}
+.set input[type=checkbox]{width:24px;height:24px;min-height:0;accent-color:var(--accent)}
+.stack{display:grid;gap:10px;padding:16px}
+
+/* import */
+.import{flex:1;display:grid;place-content:center;gap:12px;padding:24px;text-align:center}
+.import h2{font:500 28px var(--serif)}.import p{color:var(--muted)}
+.bar2{height:4px;background:var(--surface);border-radius:4px;overflow:hidden}
+.bar2 i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
+
+/* bottom sheet + lightbox */
+.scrim{position:absolute;inset:0;background:#000b;z-index:8;display:flex;align-items:flex-end}
+.sheet{width:100%;background:var(--surface);border-radius:18px 18px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom));display:grid;gap:10px}
+.sheet h2{font:500 22px var(--serif)}.sheet p{color:var(--muted)}
+.lb{position:absolute;inset:0;z-index:9;background:#000;display:grid;place-items:center;color:var(--muted)}
+.lb .icon{position:absolute;bottom:calc(env(safe-area-inset-bottom) + 24px);left:50%;transform:translateX(-50%);width:56px;min-height:56px;background:var(--surface);border:1px solid var(--line)}
+
+@media (prefers-reduced-motion:reduce){*{transition:none !important}}
+[data-anim="off"] *{transition:none !important}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- first run -->
+  <section class="screen" id="s-import">
+    <div class="import">
+      <h2>Open your archive</h2>
+      <p>Pick your Instagram export (.zip or folder). Everything stays on this phone and the app makes no network requests.</p>
+      <button id="pick-zip">Choose .zip…</button>
+      <button id="pick-dir">Choose folder…</button>
+      <small id="picked" style="color:var(--muted)">Nothing selected</small>
+      <button class="primary" id="go" disabled>Index</button>
+      <div class="bar2"><i id="fill"></i></div>
+      <small id="prog" style="color:var(--muted)"></small>
+    </div>
+  </section>
+
+  <!-- chat list -->
+  <section class="screen" id="s-list" hidden>
+    <div class="bar"><h1>IG Archive</h1>
+      <button class="icon" id="to-search" aria-label="Search messages">🔍</button>
+      <button class="icon" id="to-settings" aria-label="Settings">⚙</button></div>
+    <div class="scroll" id="chats"></div>
+  </section>
+
+  <!-- conversation -->
+  <section class="screen" id="s-chat" hidden>
+    <div class="bar">
+      <button class="icon" data-back aria-label="Back">←</button>
+      <div class="arch" id="hav"></div>
+      <div class="t"><b id="hname"></b><small id="hsub"></small></div>
+      <button class="icon" id="chat-search" aria-label="Search this chat">🔍</button>
+    </div>
+    <button class="whoami" id="whoami" hidden>Which one are you? Tap to align your messages</button>
+    <div class="strip">
+      <button aria-label="Previous month" id="prev">◀</button>
+      <div class="sel">
+        <select id="yr" aria-label="Year"><option>2026</option><option>2025</option><option>2024</option></select>
+        <select id="mo" aria-label="Month"></select>
+        <select id="dy" aria-label="Day"></select>
+      </div>
+      <div class="chipwrap"><div class="datechip" id="datechip"></div>
+        <input type="date" id="dpick" value="2026-10-11" min="2024-03-01" max="2026-10-11" aria-label="Pick a date"></div>
+      <button aria-label="Next month" id="next">▶</button>
+    </div>
+    <div class="scroll" id="view"><div class="msgs" id="msgs"></div></div>
+    <div class="fabs">
+      <button class="fab sm" id="start" aria-label="Jump to start">↑</button>
+      <button class="fab" id="latest" aria-label="Jump to latest">↓</button>
+    </div>
+  </section>
+
+  <!-- search -->
+  <section class="screen" id="s-search" hidden>
+    <div class="sbar"><button class="icon" data-back aria-label="Back">←</button>
+      <input id="q" type="search" placeholder="Search all messages"></div>
+    <div class="scroll" id="results"></div>
+  </section>
+
+  <!-- settings -->
+  <section class="screen" id="s-settings" hidden>
+    <div class="bar"><button class="icon" data-back aria-label="Back">←</button><h1>Settings</h1></div>
+    <div class="scroll">
+      <div class="set">Theme <select id="s-theme"><option value="dark">Dark</option><option value="light">Light</option></select></div>
+      <div class="set">Text size <input type="range" id="s-size" min="13" max="20" value="16"></div>
+      <div class="set">Row density <select id="s-dens"><option value="cozy">Cozy</option><option value="compact">Compact</option></select></div>
+      <div class="set">Animations <input type="checkbox" id="s-anim" checked></div>
+      <div class="set">Default timezone <input type="text" id="s-tz" value="Asia/Kolkata"></div>
+      <div class="stack">
+        <button>Choose .zip export…</button>
+        <button>Choose export folder…</button>
+        <button class="danger">Delete index</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- which participant -->
+  <div class="scrim" id="who" hidden><div class="sheet">
+    <h2>Which one are you?</h2><p>Your messages will sit on the right.</p><div class="stack" style="padding:0" id="whobtns"></div><button id="whocancel">Cancel</button></div></div>
+
+  <!-- lightbox -->
+  <div class="lb" id="lb" hidden><button class="icon" id="lbx" aria-label="Close">✕</button>igmedia: full-size image</div>
+</div>
+
+<script>
+/* Built with createElement + textContent only. Wire Android's system Back to back(). */
+const $=id=>document.getElementById(id);
+const h=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e};
+const T=(from,min,kind,x,extra={})=>({k:"msg",from,min,kind,x,...extra});
+const msgs=[
+ {k:"day",x:"Friday, 9 October 2026"},
+ T("them",1264,"text","you still up for the boss rush tonight?",{who:"Arin"}),
+ T("them",1265,"text","bring the parry build",{who:"Arin"}),
+ T("me",1265,"text","parry window is awful but yes"),
+ T("me",1266,"text","give me ten minutes",{reactions:["❤️ 1"]}),
+ T("them",1280,"voice",14,{who:"Arin"}),
+ T("me",1281,"image",""),
+ {k:"call",x:"Call · 12 min 31 s"},
+ T("them",1290,"unsent","",{who:"Arin"}),
+ T("them",1291,"text","okay that cathedral theme is unreal",{who:"Arin",reactions:["🔥 2","👀 1"]}),
+ {k:"day",x:"Saturday, 10 October 2026"},
+ {k:"call",x:"Missed call"},
+ T("me",41,"text","beat it. third try, no heals"),
+ T("them",42,"text","legend",{who:"Arin"})
+];
+const chats=[["Mira","Voice note","Oct 9"],["Night shift crew","lol no","Oct 2"],["Dev","Photo","Sep 28"],["Arin","see you then","Sep 11"]];
+function fabs(){const v=$("view"),top=v.scrollTop,bottom=v.scrollHeight-v.clientHeight-top;
+  $("start").classList.toggle("off",top<200);$("latest").classList.toggle("off",bottom<200)}
+const you={}; let current=null, stack=["import"];
+const GROUP_WINDOW_MIN=5, clock=m=>String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+const dur=s=>Math.floor(s/60)+":"+String(s%60).padStart(2,"0");
+const joined=(a,b)=>!!a&&!!b&&a.k==="msg"&&b.k==="msg"&&a.from===b.from&&Math.abs(b.min-a.min)<=GROUP_WINDOW_MIN;
+
+const screens=["import","list","chat","search","settings"];
+function show(n,push=true){screens.forEach(s=>$("s-"+s).hidden=s!==n);if(push)stack.push(n)}
+function back(){if(stack.length>1)stack.pop();show(stack[stack.length-1],false)}
+document.querySelectorAll("[data-back]").forEach(b=>b.onclick=back);
+
+/* date strip */
+["January","February","March","April","May","June","July","August","September","October","November","December"].forEach((m,i)=>{const o=h("option",null,m);o.value=i;$("mo").append(o)});
+$("mo").value=9;
+for(let d=1;d<=31;d++)$("dy").append(h("option",null,String(d)));
+$("dy").value="11";
+const fmtChip=()=>{$("datechip").textContent=new Date($("dpick").value+"T00:00").toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})};
+fmtChip();
+const syncFromSelects=()=>{$("dpick").value=$("yr").value+"-"+String(+$("mo").value+1).padStart(2,"0")+"-"+String($("dy").value).padStart(2,"0");fmtChip()};
+["yr","mo","dy"].forEach(i=>$(i).onchange=syncFromSelects);
+// Compose: tapping the chip opens DatePickerDialog
+$("dpick").onchange=()=>{const [y,m,d]=$("dpick").value.split("-");$("yr").value=y;$("mo").value=+m-1;$("dy").value=String(+d);fmtChip()};
+
+function renderMessages(){
+  const box=$("msgs");box.replaceChildren();
+  const isGroup=current==="Night shift crew";
+  msgs.forEach((m,n)=>{
+    if(m.k==="day"){box.append(h("div","day",m.x));return}
+    if(m.k==="call"){box.append(h("div","sys","☎ "+m.x));return}
+    const gp=joined(msgs[n-1],m),gn=joined(m,msgs[n+1]);
+    const mine=!!you[current]&&(m.from==="me"?"Me":current)===you[current];
+    const el=h("div","msg"+(mine?" me":"")+(gp?" g-prev":"")+(gn?" g-next":"")+(m.kind==="unsent"?" unsent":""));
+    el.dataset.i=n;
+    if(isGroup&&!gp&&!mine)el.append(h("span","sender",m.who||"Me"));
+    if(m.kind==="image"){const b=h("button","img","igmedia: image");b.onclick=()=>{$("lb").hidden=false};el.append(b)}
+    else if(m.kind==="voice")el.append(h("span","voice","🎙 Voice note · "+dur(m.x)));
+    else if(m.kind==="unsent")el.append(document.createTextNode("Message unsent"));
+    else el.append(document.createTextNode(m.x));
+    if(!gn)el.append(h("time",null,clock(m.min)));
+    if(m.reactions){const r=h("div","react");m.reactions.forEach(x=>r.append(h("span",null,x)));el.append(r)}
+    box.append(el);
+  });
+  $("view").scrollTop=0;fabs();
+}
+
+function askWho(){
+  const b=$("whobtns");b.replaceChildren();
+  [current,"Me"].forEach(p=>{const btn=h("button",p==="Me"?"primary":"",p);
+    btn.onclick=()=>{you[current]=p;$("who").hidden=true;const t=$("view").scrollTop;renderMessages();$("view").scrollTop=t;fabs();updateWho()};b.append(btn)});
+  $("who").hidden=false;
+}
+const updateWho=()=>{$("whoami").hidden=!!you[current]};
+function openChat(name,target){
+  current=name;$("hname").textContent=name;$("hav").textContent=name[0];
+  $("hsub").textContent="1,284 messages · Mar 2024 – Oct 2026";
+  if(!you[name])askWho();
+  renderMessages();show("chat");updateWho();
+  if(target!=null){const el=$("msgs").querySelector('[data-i="'+target+'"]');
+    if(el){el.scrollIntoView({block:"center"});el.classList.add("flash");setTimeout(()=>el.classList.remove("flash"),2200)}}
+}
+
+function renderList(){
+  const L=$("chats");L.replaceChildren();
+  chats.forEach(([n,s,d])=>{
+    const r=h("div","row"),meta=h("div","meta"),b=h("b",null,n);b.append(h("span",null,d));
+    meta.append(b,h("small",null,s));r.append(h("div","arch",n[0]),meta);r.onclick=()=>openChat(n);L.append(r);
+  });
+}
+
+function highlight(text,q){
+  const p=h("p"),i=text.toLowerCase().indexOf(q.toLowerCase());
+  if(i<0){p.textContent=text;return p}
+  p.append(document.createTextNode(text.slice(0,i)),h("mark",null,text.slice(i,i+q.length)),document.createTextNode(text.slice(i+q.length)));
+  return p;
+}
+$("q").oninput=e=>{
+  const q=e.target.value.trim(),R=$("results");R.replaceChildren();
+  if(q.length<2){return}
+  const hits=msgs.map((m,i)=>({m,i})).filter(({m})=>m.k==="msg"&&m.kind==="text"&&m.x.toLowerCase().includes(q.toLowerCase()));
+  if(!hits.length){R.append(h("div","empty","No messages match “"+q+"”."));return}
+  hits.forEach(({m,i})=>{const c=h("button","hit");c.append(h("b",null,"Mira"),h("small",null,"Fri 9 Oct 2026 · "+clock(m.min)),highlight(m.x,q));c.onclick=()=>openChat("Mira",i);R.append(c) /* mock: one shared transcript; real app passes hit.chatId + message id */});
+};
+
+// Real app: drive from index progress events, not a timer.
+// Real app: set from the system file picker result (SAF URI), not a mock name.
+const pick=n=>{$("picked").textContent="Selected: "+n;$("go").disabled=false};
+$("pick-zip").onclick=()=>pick("instagram-export.zip");
+$("pick-dir").onclick=()=>pick("instagram-export/");
+$("go").onclick=()=>{$("go").disabled=true;$("prog").textContent="Preparing…";$("fill").style.width="4%";let p=0;const t=setInterval(()=>{p+=12;$("fill").style.width=Math.min(p,100)+"%";$("prog").textContent="Indexing… "+Math.min(p,100)+"%";
+  if(p>=100){clearInterval(t);stack=["list"];renderList();show("list",false)}},200)};
+$("to-search").onclick=()=>{show("search");$("q").focus()};
+$("chat-search").onclick=()=>{show("search");$("q").focus()};
+$("to-settings").onclick=()=>show("settings");
+$("view").onscroll=fabs;
+$("start").onclick=()=>$("view").scrollTo({top:0,behavior:"smooth"});
+$("latest").onclick=()=>$("view").scrollTo({top:$("view").scrollHeight,behavior:"smooth"});
+const dismissWho=()=>{$("who").hidden=true}; // browse without identifying; banner stays until answered
+$("whocancel").onclick=dismissWho;
+$("whoami").onclick=askWho;
+$("who").onclick=e=>{if(e.target===$("who"))dismissWho()};
+$("lbx").onclick=()=>{$("lb").hidden=true};
+$("lb").onclick=e=>{if(e.target===$("lb"))$("lb").hidden=true};
+const root=document.documentElement;
+$("s-theme").onchange=e=>root.dataset.theme=e.target.value;
+$("s-size").oninput=e=>{root.style.fontSize=e.target.value+"px"};
+$("s-dens").onchange=e=>root.dataset.density=e.target.value;
+$("s-anim").onchange=e=>root.dataset.anim=e.target.checked?"on":"off";
+</script>
+</body>
+</html>

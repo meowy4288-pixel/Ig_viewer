@@ -1,0 +1,496 @@
+package com.igviewer.archive.ui.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.igviewer.archive.ui.components.ArchAvatar
+import com.igviewer.archive.ui.components.EmptyState
+import com.igviewer.archive.ui.components.Hairline
+import com.igviewer.archive.ui.theme.Tokens
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
+
+data class MessageItem(
+    val sender: String,
+    val text: String,
+    val time: String,
+    val isMe: Boolean,
+    val isUnsent: Boolean = false,
+    val hasImage: Boolean = false,
+    val hasVoice: Boolean = false,
+    /** Absolute, validated file paths of renderable images on this message. */
+    val imageFiles: List<String> = emptyList(),
+    val reactions: List<String> = emptyList(),
+    /** Non-null on the first message of a calendar day; rendered as a centred header. */
+    val daySeparator: String? = null,
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChatScreen(
+    chatName: String,
+    messages: List<MessageItem>,
+    onBack: () -> Unit,
+    onSearchClick: () -> Unit,
+) {
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    var pickerOpen by remember { mutableStateOf(false) }
+    var selectedDate by remember { mutableStateOf(Calendar.getInstance()) }
+    var overlay by remember { mutableStateOf<String?>(null) }
+
+    val showJumpToTop by remember {
+        derivedStateOf { listState.firstVisibleItemIndex > 5 || listState.firstVisibleItemScrollOffset > 500 }
+    }
+    val showJumpToBottom by remember {
+        derivedStateOf {
+            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()
+            last == null || last.index < listState.layoutInfo.totalItemsCount - 1
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Tokens.Text)
+                }
+                ArchAvatar(
+                    letter = chatName.ifEmpty { "?" },
+                    width = 30.dp,
+                    height = 36.dp,
+                    fontSize = 15,
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 10.dp),
+                ) {
+                    Text(
+                        text = chatName.ifEmpty { "—" },
+                        color = Tokens.Text,
+                        fontFamily = Tokens.Serif,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 17.sp,
+                        maxLines = 1,
+                    )
+                    Text(
+                        text = "${messages.size} messages",
+                        color = Tokens.Muted,
+                        fontSize = 12.sp,
+                    )
+                }
+                IconButton(onClick = onSearchClick) {
+                    Icon(Icons.Default.Search, contentDescription = "Search this chat", tint = Tokens.Text)
+                }
+            }
+            Hairline()
+
+            DateStrip(
+                selected = selectedDate,
+                onPrev = { selectedDate = shiftMonth(selectedDate, -1) },
+                onNext = { selectedDate = shiftMonth(selectedDate, +1) },
+                onOpenPicker = { pickerOpen = true },
+            )
+
+            if (messages.isEmpty()) {
+                EmptyState("No messages to show.")
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 88.dp),
+                ) {
+                    itemsIndexed(messages, key = { i, _ -> i }) { i, msg ->
+                        val prev = messages.getOrNull(i - 1)
+                        val next = messages.getOrNull(i + 1)
+                        val groupedTop = prev != null && prev.isMe == msg.isMe && prev.daySeparator == null
+                        val groupedBottom = next != null && next.isMe == msg.isMe && next.daySeparator == null
+                        MessageBlock(
+                            msg = msg,
+                            groupedTop = groupedTop,
+                            groupedBottom = groupedBottom,
+                            onImageClick = { overlay = it },
+                        )
+                    }
+                }
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (showJumpToTop) {
+                SmallFab(
+                    onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                    light = true,
+                ) { Icon(Icons.Default.KeyboardArrowUp, "Jump to start", tint = Tokens.Text) }
+            }
+            if (showJumpToBottom) {
+                SmallFab(
+                    onClick = {
+                        scope.launch { listState.animateScrollToItem(maxOf(0, messages.size - 1)) }
+                    },
+                    light = false,
+                ) { Icon(Icons.Default.KeyboardArrowDown, "Jump to latest", tint = Tokens.OnAccent) }
+            }
+        }
+
+        overlay?.let { path ->
+            ImageOverlay(path = path, onClose = { overlay = null })
+        }
+    }
+
+    if (pickerOpen) {
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = selectedDate.timeInMillis,
+        )
+        DatePickerDialog(
+            onDismissRequest = { pickerOpen = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let {
+                        val c = Calendar.getInstance().apply { timeInMillis = it }
+                        selectedDate = c
+                    }
+                    pickerOpen = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pickerOpen = false }) { Text("Cancel") }
+            },
+        ) {
+            DatePicker(state = state)
+        }
+    }
+}
+
+@Composable
+private fun SmallFab(light: Boolean, onClick: () -> Unit, content: @Composable () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .background(if (light) Tokens.Surface else Tokens.Accent)
+            .then(if (light) Modifier.border(1.dp, Tokens.Line, CircleShape) else Modifier)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { content() }
+}
+
+@Composable
+private fun DateStrip(
+    selected: Calendar,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onOpenPicker: () -> Unit,
+) {
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onPrev, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Previous month", tint = Tokens.Text)
+            }
+            val label = remember(selected) {
+                SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(selected.time)
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(40.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Tokens.Surface)
+                    .border(1.dp, Tokens.Line, RoundedCornerShape(10.dp))
+                    .clickable(onClick = onOpenPicker),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(text = label, color = Tokens.Text, fontWeight = FontWeight.Medium)
+            }
+            IconButton(onClick = onNext, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Next month", tint = Tokens.Text)
+            }
+        }
+        Hairline()
+    }
+}
+
+@Composable
+private fun MessageBlock(
+    msg: MessageItem,
+    groupedTop: Boolean,
+    groupedBottom: Boolean,
+    onImageClick: (String) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        if (msg.daySeparator != null) {
+            Text(
+                text = msg.daySeparator,
+                color = Tokens.Gilt,
+                fontFamily = Tokens.Serif,
+                fontStyle = FontStyle.Italic,
+                fontSize = 14.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 18.dp, bottom = 8.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+        }
+        MessageBubble(msg, groupedTop, groupedBottom, onImageClick)
+    }
+}
+
+@Composable
+private fun MessageBubble(
+    msg: MessageItem,
+    groupedTop: Boolean,
+    groupedBottom: Boolean,
+    onImageClick: (String) -> Unit,
+) {
+    val bg = if (msg.isMe) Tokens.Accent else Tokens.Surface
+    val fg = if (msg.isMe) Tokens.OnAccent else Tokens.Text
+
+    val large = 18.dp
+    val small = 4.dp
+    val grouped = 6.dp
+
+    val shape = if (msg.isMe) {
+        RoundedCornerShape(
+            topStart = large,
+            topEnd = if (groupedTop) grouped else large,
+            bottomEnd = if (groupedBottom) grouped else small,
+            bottomStart = if (groupedBottom) grouped else large,
+        )
+    } else {
+        RoundedCornerShape(
+            topStart = if (groupedTop) grouped else large,
+            topEnd = large,
+            bottomEnd = if (groupedBottom) grouped else large,
+            bottomStart = if (groupedBottom) grouped else small,
+        )
+    }
+
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(top = if (groupedTop) 2.dp else 10.dp)) {
+        val maxBubble = maxWidth * 0.8f
+        Box(
+            modifier = Modifier
+                .align(if (msg.isMe) Alignment.CenterEnd else Alignment.CenterStart)
+                .widthIn(max = maxBubble)
+                .clip(shape)
+                .background(bg)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            Column {
+                if (msg.isUnsent) {
+                    Text(
+                        text = "Message unsent",
+                        color = Tokens.Muted,
+                        fontStyle = FontStyle.Italic,
+                        fontSize = 15.sp,
+                    )
+                } else {
+                    if (msg.text.isNotBlank()) {
+                        Text(text = msg.text, color = fg, fontSize = 15.sp)
+                    }
+                    msg.imageFiles.forEach { path ->
+                        MediaImage(path = path, onClick = { onImageClick(path) })
+                    }
+                    if (msg.imageFiles.isEmpty() && msg.hasImage) {
+                        Box(
+                            modifier = Modifier
+                                .width(220.dp)
+                                .height(165.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Tokens.Bg),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(text = "Image", color = Tokens.Muted, fontSize = 13.sp)
+                        }
+                    }
+                    if (msg.hasVoice) {
+                        Text(
+                            text = "🎙 Voice note",
+                            color = fg,
+                            fontSize = 15.sp,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+                }
+
+                if (msg.reactions.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier.padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        msg.reactions.forEach { reaction ->
+                            Box(
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(Tokens.Bg)
+                                    .border(1.dp, Tokens.Line, CircleShape)
+                                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                            ) {
+                                Text(text = reaction, color = Tokens.Text, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+
+                if (!groupedBottom) {
+                    Text(
+                        text = msg.time,
+                        color = fg.copy(alpha = 0.55f),
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 1.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun shiftMonth(cal: Calendar, delta: Int): Calendar {
+    val c = cal.clone() as Calendar
+    c.add(Calendar.MONTH, delta)
+    return c
+}
+
+@Composable
+private fun MediaImage(path: String, onClick: () -> Unit) {
+    val image by produceState<ImageBitmap?>(initialValue = null, path) {
+        value = withContext(Dispatchers.IO) {
+            runCatching { decodeScaled(path, 1280) }.getOrNull()
+        }
+    }
+    Box(
+        modifier = Modifier
+            .padding(top = 4.dp)
+            .size(width = 220.dp, height = 165.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Tokens.Bg)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        val img = image
+        if (img != null) {
+            Image(
+                bitmap = img,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Text(text = "Image", color = Tokens.Muted, fontSize = 13.sp)
+        }
+    }
+}
+
+@Composable
+private fun ImageOverlay(path: String, onClose: () -> Unit) {
+    val image by produceState<ImageBitmap?>(initialValue = null, path) {
+        value = withContext(Dispatchers.IO) {
+            runCatching { decodeScaled(path, 2048) }.getOrNull()
+        }
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.96f))
+            .clickable(onClick = onClose),
+        contentAlignment = Alignment.Center,
+    ) {
+        val img = image
+        if (img != null) {
+            Image(
+                bitmap = img,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxWidth().padding(8.dp),
+            )
+        } else {
+            Text(text = "Loading…", color = Tokens.Text)
+        }
+    }
+}
+
+private fun decodeScaled(path: String, maxPx: Int): ImageBitmap? {
+    val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    android.graphics.BitmapFactory.decodeFile(path, bounds)
+    var sample = 1
+    val biggest = maxOf(bounds.outWidth, bounds.outHeight)
+    while (biggest / sample > maxPx) sample *= 2
+    val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
+    val bmp = android.graphics.BitmapFactory.decodeFile(path, opts) ?: return null
+    return bmp.asImageBitmap()
+}

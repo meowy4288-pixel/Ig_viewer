@@ -2,8 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- No INTERNET. MANAGE_EXTERNAL_STORAGE grants direct filesystem access
          to the export folder, avoiding a full 2GB copy into app-private storage.
-         Requires user grant via Settings on Android 11+. -->
+         Requires user grant via Settings on Android 11+. On Android 10 and below
+         the equivalent is READ_EXTERNAL_STORAGE, requested at runtime. -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
     <application
         android:allowBackup="false"
         android:label="@string/app_name"

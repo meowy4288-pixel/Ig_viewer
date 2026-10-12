@@ -12,8 +12,8 @@ android {
         applicationId = "com.igviewer.archive"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
 
     buildTypes {
@@ -47,5 +47,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.media3.exoplayer)
-    implementation(libs.uniffi)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.org.json)
 }
