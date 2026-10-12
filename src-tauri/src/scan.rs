@@ -104,35 +104,57 @@ pub fn parse_file_number(name: &str) -> Result<u32, SkipReason> {
         .map_err(|_| SkipReason::FileNumberOverflow)
 }
 
-/// Resolve the inbox, accepting either the export root or the `your_instagram_activity`
-/// folder itself.
+/// How far below the chosen folder we will look for the messages inbox.
+const DISCOVERY_DEPTH: usize = 5;
+
+/// Find `.../messages/inbox` beneath `root`.
 ///
-/// Instagram's own instructions tell users to point at the top of the download, but
-/// people just as often select the folder that visibly contains `messages/`. Failing
-/// silently in that case is confusing, so both are accepted and normalised to one.
+/// A user picking an export should not have to know where inside it the messages
+/// live. Instagram has shipped several layouts, and an unzipped download usually
+/// gains a generated folder name:
 ///
-/// `<root>/your_instagram_activity/messages/inbox`
+///     instagram-data-123456/your_instagram_activity/messages/inbox/<thread>
+///     your_instagram_activity/messages/inbox/<thread>
+///     messages/inbox/<thread>
+///
+/// The first two are tried directly, then the tree is walked down a bounded number
+/// of levels so picking ~/Downloads works too. Symlinked directories are never
+/// followed, so discovery cannot leave the folder the user actually chose.
 fn inbox_dir(root: &Path) -> PathBuf {
-    let inner = root
+    let canonical = root
         .join("your_instagram_activity")
         .join("messages")
         .join("inbox");
-    if inner.is_dir() {
-        return inner;
-    }
-    // root may already BE the your_instagram_activity folder, or an export whose
-    // folder is named differently.
-    for candidate in [
-        root.join("messages").join("inbox"),
-        root.join("your_instagram_activity")
-            .join("messages")
-            .join("inbox"),
-    ] {
+    for candidate in [canonical.clone(), root.join("messages").join("inbox")] {
         if candidate.is_dir() {
             return candidate;
         }
     }
-    inner
+    find_inbox_below(root, DISCOVERY_DEPTH).unwrap_or(canonical)
+}
+
+/// Depth-first search for a directory literally named `inbox`.
+fn find_inbox_below(dir: &Path, budget: usize) -> Option<PathBuf> {
+    if budget == 0 {
+        return None;
+    }
+    let rd = std::fs::read_dir(dir).ok()?;
+    for e in rd.flatten() {
+        let p = e.path();
+        let Ok(md) = std::fs::symlink_metadata(&p) else {
+            continue;
+        };
+        if !md.is_dir() || md.file_type().is_symlink() {
+            continue;
+        }
+        if p.file_name().is_some_and(|n| n == "inbox") {
+            return Some(p);
+        }
+        if let Some(found) = find_inbox_below(&p, budget - 1) {
+            return Some(found);
+        }
+    }
+    None
 }
 
 /// True if the path is a symlink. Never follows it.
@@ -315,6 +337,108 @@ mod tests {
         assert_eq!(
             parse_file_number("message_4294967296.json"),
             Err(SkipReason::FileNumberOverflow)
+        );
+    }
+}
+
+#[cfg(test)]
+mod discovery_tests {
+    use super::DISCOVERY_DEPTH;
+    use super::*;
+
+    /// Real export shapes seen in the wild, including Instagram's generated
+    /// top-level folder name.
+    fn make(paths: &[&str]) -> tempfile::TempDir {
+        let d = tempfile::tempdir().unwrap();
+        for p in paths {
+            std::fs::create_dir_all(d.path().join(p)).unwrap();
+        }
+        d
+    }
+
+    #[test]
+    fn finds_inbox_at_the_top_level() {
+        let d = make(&["your_instagram_activity/messages/inbox/alice_1"]);
+        assert_eq!(
+            inbox_dir(d.path()),
+            d.path().join("your_instagram_activity/messages/inbox")
+        );
+    }
+
+    #[test]
+    fn finds_inbox_under_a_generated_export_folder() {
+        // instagram-data-123456/your_instagram_activity/messages/inbox/<thread>
+        let d = make(&["instagram-data-123456/your_instagram_activity/messages/inbox/alice_1"]);
+        assert_eq!(
+            inbox_dir(d.path()),
+            d.path()
+                .join("instagram-data-123456/your_instagram_activity/messages/inbox")
+        );
+    }
+
+    #[test]
+    fn finds_inbox_when_pointed_at_the_download_folder() {
+        // The user picks ~/Downloads, which merely CONTAINS the export.
+        let d = make(&["instagram-data-999/your_instagram_activity/messages/inbox/alice_1"]);
+        assert_eq!(
+            inbox_dir(d.path()),
+            d.path()
+                .join("instagram-data-999/your_instagram_activity/messages/inbox")
+        );
+    }
+
+    #[test]
+    fn finds_inbox_when_root_is_already_the_activity_folder() {
+        let d = make(&["messages/inbox/alice_1"]);
+        assert_eq!(inbox_dir(d.path()), d.path().join("messages/inbox"));
+    }
+
+    #[test]
+    fn prefers_the_canonical_path_over_a_deeper_one() {
+        // Two candidates exist; the documented layout must win, not whichever the
+        // directory walk happened to reach first.
+        let d = make(&[
+            "your_instagram_activity/messages/inbox/canonical",
+            "other/messages/inbox/decoy",
+        ]);
+        assert_eq!(
+            inbox_dir(d.path()),
+            d.path().join("your_instagram_activity/messages/inbox")
+        );
+    }
+
+    #[test]
+    fn falls_back_to_the_canonical_path_when_nothing_matches() {
+        let d = tempfile::tempdir().unwrap();
+        assert_eq!(
+            inbox_dir(d.path()),
+            d.path().join("your_instagram_activity/messages/inbox")
+        );
+    }
+
+    #[test]
+    fn discovery_does_not_follow_symlinks() {
+        let d = tempfile::tempdir().unwrap();
+        let target = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(target.path().join("messages/inbox/x")).unwrap();
+        std::os::unix::fs::symlink(target.path(), d.path().join("link")).unwrap();
+        // Must NOT resolve through the symlink.
+        assert_eq!(
+            inbox_dir(d.path()),
+            d.path().join("your_instagram_activity/messages/inbox")
+        );
+    }
+
+    #[test]
+    fn discovery_respects_its_depth_budget() {
+        let mut deep = String::new();
+        for i in 0..(DISCOVERY_DEPTH + 2) {
+            deep.push_str(&format!("level{i}/"));
+        }
+        let d = make(&[&format!("{deep}messages/inbox/thread")]);
+        assert_eq!(
+            inbox_dir(d.path()),
+            d.path().join("your_instagram_activity/messages/inbox")
         );
     }
 }

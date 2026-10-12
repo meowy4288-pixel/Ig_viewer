@@ -48,7 +48,8 @@ fn app_info() -> String {
 /// rather than a path -- see the notes in `scan.rs`.
 #[tauri::command]
 async fn pick_export_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    let picked = pick_folder_native("Select your unzipped Instagram export folder").await
+    let picked = pick_folder_native("Select your unzipped Instagram export folder")
+        .await
         .ok_or_else(|| "picker-unavailable".to_string())?;
     let dir = archives_dir(&app)?;
     let id = new_archive_id();

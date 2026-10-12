@@ -53,6 +53,15 @@ impl MediaStatus {
 /// Returns `Err(status)` without touching the filesystem for obviously hostile
 /// URIs, so `../../..` never even stats.
 pub fn resolve(root: &Path, uri: &str) -> Result<PathBuf, MediaStatus> {
+    match resolve_exact(root, uri) {
+        Err(MediaStatus::Missing) => resolve_by_basename(root, uri),
+        Err(e) => Err(e),
+        Ok(v) => Ok(v),
+    }
+}
+
+/// Resolve `root/<uri>` exactly as written.
+fn resolve_exact(root: &Path, uri: &str) -> Result<PathBuf, MediaStatus> {
     if uri.is_empty() || uri.starts_with('/') || uri.contains('\0') {
         return Err(MediaStatus::TraversalRejected);
     }
@@ -103,6 +112,62 @@ pub fn resolve(root: &Path, uri: &str) -> Result<PathBuf, MediaStatus> {
         return Err(MediaStatus::OutsideExport);
     }
     Ok(canon)
+}
+
+/// Fall back to the file's basename inside the thread's own media directories.
+///
+/// Instagram rewrites thread directory names when exporting (to obfuscate
+/// usernames) but does NOT rewrite the `uri` inside message JSON, so a real
+/// export can contain:
+///
+///     uri:  your_instagram_activity/messages/inbox/_example__00000000000000000/audio/x.mp4
+///     disk: your_instagram_activity/messages/inbox/thread_0000/audio/x.mp4
+///
+/// The exact join then misses and the media would show as unavailable.
+///
+/// Safety is unchanged: only the basename of an already-validated relative path is
+/// used, it is never joined onto anything the URI supplies, candidates are built
+/// ourselves under `inbox/<thread>/<kind>/`, and every candidate still goes through
+/// the same symlink and containment checks. Nothing outside the export is reachable.
+fn resolve_by_basename(root: &Path, uri: &str) -> Result<PathBuf, MediaStatus> {
+    let Some(name) = uri.rsplit('/').next() else {
+        return Err(MediaStatus::Missing);
+    };
+    // A bare name, or anything that looks like traversal, gets no fallback.
+    if name.is_empty() || name == "." || name == ".." || name.contains('/') || name.contains('\\') {
+        return Err(MediaStatus::Missing);
+    }
+    let inbox = root
+        .join("your_instagram_activity")
+        .join("messages")
+        .join("inbox");
+    let Ok(threads) = std::fs::read_dir(&inbox) else {
+        return Err(MediaStatus::Missing);
+    };
+    let threads: Vec<_> = threads.flatten().map(|t| t.path()).collect();
+    // Audio, photos and videos are the media directories Instagram emits.
+    for kind in ["audio", "photos", "videos"] {
+        for t in &threads {
+            let rel = rel_under_root(&t.join(kind).join(name), root);
+            if let Ok(resolved) = resolve_exact(root, &rel) {
+                return Ok(resolved);
+            }
+        }
+    }
+    Err(MediaStatus::Missing)
+}
+
+/// Render an absolute path as the relative form `resolve_exact` expects.
+fn rel_under_root(path: &Path, root: &Path) -> String {
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .components()
+        .filter_map(|c| match c {
+            Component::Normal(s) => Some(s.to_string_lossy().to_string()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 /// Open a validated media file, re-verifying containment on the *opened handle* to
