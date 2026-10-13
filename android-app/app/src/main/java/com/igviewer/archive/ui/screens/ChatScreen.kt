@@ -1,5 +1,6 @@
 package com.igviewer.archive.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -39,6 +41,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,8 +56,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.LinkInteractionListener
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.igviewer.archive.ui.components.ArchAvatar
@@ -74,8 +85,11 @@ data class MessageItem(
     val time: String,
     val isMe: Boolean,
     val isUnsent: Boolean = false,
-    val hasImage: Boolean = false,
-    val hasVoice: Boolean = false,
+    /** Labels for media that can't be previewed inline (Video, Voice note, File, ...). */
+    val attachmentLabels: List<String> = emptyList(),
+    /** A shared post/reel link, when this message is one. */
+    val shareLink: String? = null,
+    val shareText: String? = null,
     /** Absolute, validated file paths of renderable images on this message. */
     val imageFiles: List<String> = emptyList(),
     val reactions: List<String> = emptyList(),
@@ -90,12 +104,26 @@ fun ChatScreen(
     messages: List<MessageItem>,
     onBack: () -> Unit,
     onSearchClick: () -> Unit,
+    /** When non-null, the list jumps to and highlights this kept-message index. */
+    scrollToIndex: Int? = null,
+    /** The display name treated as "you" in this chat, or null when auto-detected. */
+    selfName: String? = null,
+    /** Opens the per-chat "who are you" chooser. */
+    onChooseSelf: () -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var pickerOpen by remember { mutableStateOf(false) }
     var selectedDate by remember { mutableStateOf(Calendar.getInstance()) }
     var overlay by remember { mutableStateOf<String?>(null) }
+
+    BackHandler(enabled = overlay != null) { overlay = null }
+
+    LaunchedEffect(scrollToIndex, messages) {
+        val target = scrollToIndex ?: return@LaunchedEffect
+        if (messages.isEmpty()) return@LaunchedEffect
+        listState.scrollToItem(target.coerceIn(0, messages.lastIndex))
+    }
 
     val showJumpToTop by remember {
         derivedStateOf { listState.firstVisibleItemIndex > 5 || listState.firstVisibleItemScrollOffset > 500 }
@@ -138,9 +166,20 @@ fun ChatScreen(
                         maxLines = 1,
                     )
                     Text(
-                        text = "${messages.size} messages",
+                        text = buildString {
+                            append("${messages.size} messages")
+                            if (!selfName.isNullOrBlank()) append(" · you are $selfName")
+                        },
                         color = Tokens.Muted,
                         fontSize = 12.sp,
+                        maxLines = 1,
+                    )
+                }
+                IconButton(onClick = onChooseSelf) {
+                    Icon(
+                        Icons.Default.Person,
+                        contentDescription = "Who am I in this chat",
+                        tint = if (selfName.isNullOrBlank()) Tokens.Muted else Tokens.Accent,
                     )
                 }
                 IconButton(onClick = onSearchClick) {
@@ -171,12 +210,24 @@ fun ChatScreen(
                         val next = messages.getOrNull(i + 1)
                         val groupedTop = prev != null && prev.isMe == msg.isMe && prev.daySeparator == null
                         val groupedBottom = next != null && next.isMe == msg.isMe && next.daySeparator == null
-                        MessageBlock(
-                            msg = msg,
-                            groupedTop = groupedTop,
-                            groupedBottom = groupedBottom,
-                            onImageClick = { overlay = it },
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(
+                                    if (i == scrollToIndex) {
+                                        Modifier.background(Tokens.AccentDim)
+                                    } else {
+                                        Modifier
+                                    },
+                                ),
+                        ) {
+                            MessageBlock(
+                                msg = msg,
+                                groupedTop = groupedTop,
+                                groupedBottom = groupedBottom,
+                                onImageClick = { overlay = it },
+                            )
+                        }
                     }
                 }
             }
@@ -361,30 +412,16 @@ private fun MessageBubble(
                     )
                 } else {
                     if (msg.text.isNotBlank()) {
-                        Text(text = msg.text, color = fg, fontSize = 15.sp)
+                        LinkText(text = msg.text, color = fg, fontSize = 15.sp)
                     }
                     msg.imageFiles.forEach { path ->
                         MediaImage(path = path, onClick = { onImageClick(path) })
                     }
-                    if (msg.imageFiles.isEmpty() && msg.hasImage) {
-                        Box(
-                            modifier = Modifier
-                                .width(220.dp)
-                                .height(165.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Tokens.Bg),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(text = "Image", color = Tokens.Muted, fontSize = 13.sp)
-                        }
+                    msg.attachmentLabels.forEach { label ->
+                        AttachmentChip(label = label, fg = fg)
                     }
-                    if (msg.hasVoice) {
-                        Text(
-                            text = "🎙 Voice note",
-                            color = fg,
-                            fontSize = 15.sp,
-                            modifier = Modifier.padding(top = 2.dp),
-                        )
+                    if (msg.shareLink != null || msg.shareText != null) {
+                        ShareCard(link = msg.shareLink, text = msg.shareText, fg = fg)
                     }
                 }
 
@@ -424,6 +461,89 @@ private fun shiftMonth(cal: Calendar, delta: Int): Calendar {
     val c = cal.clone() as Calendar
     c.add(Calendar.MONTH, delta)
     return c
+}
+
+/** http(s) URLs only. Every other scheme stays inert text. */
+private val LINK_RE = Regex("""https?://[^\s<>"']+""")
+
+/**
+ * Message text with bare http(s) links rendered as tappable. Content is untrusted,
+ * so only http/https become links; everything else is plain text.
+ */
+@Composable
+private fun LinkText(text: String, color: Color, fontSize: androidx.compose.ui.unit.TextUnit) {
+    val uriHandler = LocalUriHandler.current
+    val annotated = remember(text) {
+        buildAnnotatedString {
+            var last = 0
+            for (m in LINK_RE.findAll(text)) {
+                if (m.range.first > last) append(text.substring(last, m.range.first))
+                val url = m.value
+                withLink(
+                    LinkAnnotation.Url(
+                        url = url,
+                        styles = TextLinkStyles(
+                            style = SpanStyle(
+                                color = Tokens.Accent,
+                                textDecoration = TextDecoration.Underline,
+                            ),
+                        ),
+                        linkInteractionListener = LinkInteractionListener { uriHandler.openUri(url) },
+                    ),
+                ) { append(url) }
+                last = m.range.last + 1
+            }
+            if (last < text.length) append(text.substring(last))
+        }
+    }
+    Text(text = annotated, color = color, fontSize = fontSize)
+}
+
+/** A small bordered chip naming a non-previewable attachment (Video, GIF, File, ...). */
+@Composable
+private fun AttachmentChip(label: String, fg: Color) {
+    Box(
+        modifier = Modifier
+            .padding(top = 4.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Tokens.Bg)
+            .border(1.dp, Tokens.Line, RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+    ) {
+        Text(text = "[$label]", color = fg.copy(alpha = 0.85f), fontSize = 13.sp)
+    }
+}
+
+/** A shared post/reel: its caption (link-aware) and the link itself. */
+@Composable
+private fun ShareCard(link: String?, text: String?, fg: Color) {
+    val kind = when {
+        link == null -> "Shared post"
+        link.contains("/reel") -> "Shared reel"
+        link.contains("/stories") -> "Shared story"
+        link.contains("/tv/") -> "Shared video"
+        else -> "Shared post"
+    }
+    Column(
+        modifier = Modifier
+            .padding(top = 6.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(Tokens.Bg)
+            .border(1.dp, Tokens.Line, RoundedCornerShape(10.dp))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+    ) {
+        Text(text = kind, color = Tokens.Gilt, fontSize = 11.sp)
+        if (!text.isNullOrBlank()) {
+            Box(modifier = Modifier.padding(top = 3.dp)) {
+                LinkText(text = text, color = fg, fontSize = 14.sp)
+            }
+        }
+        if (!link.isNullOrBlank()) {
+            Box(modifier = Modifier.padding(top = 3.dp)) {
+                LinkText(text = link, color = Tokens.Accent, fontSize = 13.sp)
+            }
+        }
+    }
 }
 
 @Composable

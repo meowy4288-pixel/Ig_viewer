@@ -8,10 +8,13 @@ enum class Screen {
     IMPORT, LIST, CHAT, SEARCH, SETTINGS,
 }
 
-class NavState {
-    var current by mutableStateOf(Screen.IMPORT)
+class NavState(start: Screen = Screen.IMPORT) {
+    var current by mutableStateOf(start)
         private set
-    private val stack = mutableListOf(Screen.IMPORT)
+    private val stack = mutableListOf(start)
+
+    /** True when there is a previous screen to return to. */
+    val canGoBack: Boolean get() = stack.size > 1
 
     fun navigate(screen: Screen) {
         if (current != screen) {

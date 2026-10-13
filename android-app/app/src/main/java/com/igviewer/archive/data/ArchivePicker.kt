@@ -57,10 +57,40 @@ class ArchivePicker(private val context: Context) {
         return dest.absolutePath
     }
 
-    /** Stream-extract a `.zip` into [destDir]. Returns the dir path. */
+    /**
+     * Extract a `.zip` into [destDir]. Returns the dir path.
+     *
+     * Streaming via [ZipInputStream] is the default (no temp copy). Some writers --
+     * notably phone "compress", which streams and cannot seek -- emit entries whose
+     * sizes live in a data descriptor or ZIP64, which [ZipInputStream] mis-reads and
+     * then fails with "unexpected end of zlib input stream". On that failure we retry
+     * through the central directory with [java.util.zip.ZipFile], which knows the exact
+     * per-entry sizes; it needs a seekable copy, so we spill the zip to cache first.
+     */
     fun extractZip(uri: Uri, destDir: File): String {
         if (destDir.exists()) destDir.deleteRecursively()
         destDir.mkdirs()
+        // "Unexpected end of ZLIB input stream" surfaces as EOFException, while a bad
+        // method/size surfaces as ZipException. Both mean ZipInputStream could not make
+        // sense of a streaming/data-descriptor zip, so either triggers the ZipFile retry.
+        val inflateFailed = try {
+            extractStreaming(uri, destDir)
+            false
+        } catch (e: java.io.EOFException) {
+            true
+        } catch (e: java.util.zip.ZipException) {
+            true
+        }
+        if (inflateFailed) {
+            if (destDir.exists()) destDir.deleteRecursively()
+            destDir.mkdirs()
+            extractViaZipFile(uri, destDir)
+        }
+        check(destDir.isDirectory) { "extract produced nothing from $uri" }
+        return destDir.absolutePath
+    }
+
+    private fun extractStreaming(uri: Uri, destDir: File) {
         val destCanon = destDir.canonicalFile
         var total = 0L
         var count = 0
@@ -100,8 +130,58 @@ class ArchivePicker(private val context: Context) {
                 }
             }
         }
-        check(destDir.isDirectory) { "extract produced nothing from $uri" }
-        return destDir.absolutePath
+    }
+
+    private fun extractViaZipFile(uri: Uri, destDir: File) {
+        val tmp = File(context.cacheDir, "import.zip")
+        tmp.delete()
+        context.contentResolver.openInputStream(uri).use { raw ->
+            requireNotNull(raw) { "cannot open $uri" }
+            tmp.outputStream().use { o -> raw.copyTo(o, 1 shl 16) }
+        }
+        try {
+            java.util.zip.ZipFile(tmp).use { zip -> extractEntries(zip, destDir) }
+        } finally {
+            tmp.delete()
+        }
+    }
+
+    private fun extractEntries(zip: java.util.zip.ZipFile, destDir: File) {
+        val destCanon = destDir.canonicalFile
+        var total = 0L
+        var count = 0
+        val buf = ByteArray(1 shl 16)
+        val entries = zip.entries()
+        while (entries.hasMoreElements()) {
+            val entry = entries.nextElement()
+            val name = entry.name
+            if (name.contains('\\')) throw IOException("backslash in zip member")
+            if (name.startsWith("/") || name.split('/').any { it == ".." }) {
+                throw IOException("zip-slip member")
+            }
+            val out = File(destDir, name).canonicalFile
+            if (out != destCanon && !out.path.startsWith(destCanon.path + File.separator)) {
+                throw IOException("zip member escapes destination")
+            }
+            if (entry.isDirectory) {
+                out.mkdirs()
+                continue
+            }
+            count++
+            if (count > MAX_ZIP_FILES) throw IOException("too many zip members")
+            out.parentFile?.mkdirs()
+            zip.getInputStream(entry).use { input ->
+                out.outputStream().use { o ->
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        total += n
+                        if (total > MAX_ZIP_UNCOMPRESSED) throw IOException("zip too large")
+                        o.write(buf, 0, n)
+                    }
+                }
+            }
+        }
     }
 
     private fun copySingle(uri: Uri, dest: java.io.File) {

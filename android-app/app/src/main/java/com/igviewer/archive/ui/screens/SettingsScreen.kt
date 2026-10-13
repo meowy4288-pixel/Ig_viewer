@@ -52,6 +52,10 @@ fun SettingsScreen(
     onPickDir: () -> Unit,
     onDeleteIndex: () -> Unit,
     onGrantAccess: () -> Unit,
+    meName: String? = null,
+    onChooseMe: () -> Unit = {},
+    sfxEnabled: Boolean = true,
+    onSfxToggle: (Boolean) -> Unit = {},
 ) {
     var theme by remember { mutableStateOf("Dark") }
     var textSize by remember { mutableFloatStateOf(16f) }
@@ -83,6 +87,25 @@ fun SettingsScreen(
             SettingRow(label = "Theme") {
                 DropdownSetting(theme, listOf("Dark", "Light")) { theme = it }
             }
+            SettingRow(label = "You are") {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = meName ?: "Auto",
+                        color = if (meName != null) Tokens.Text else Tokens.Muted,
+                        fontSize = 14.sp,
+                    )
+                    OutlinedButton(
+                        onClick = onChooseMe,
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, Tokens.Line),
+                    ) {
+                        Text("Choose", color = Tokens.Text)
+                    }
+                }
+            }
             SettingRow(label = "Text size") {
                 Slider(
                     value = textSize,
@@ -103,6 +126,12 @@ fun SettingsScreen(
                 Checkbox(
                     checked = animations,
                     onCheckedChange = { animations = it },
+                )
+            }
+            SettingRow(label = "Sound effects") {
+                Checkbox(
+                    checked = sfxEnabled,
+                    onCheckedChange = onSfxToggle,
                 )
             }
             SettingRow(label = "Default timezone") {

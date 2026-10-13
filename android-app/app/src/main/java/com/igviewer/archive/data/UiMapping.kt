@@ -11,17 +11,16 @@ import java.util.Locale
 object UiMapping {
 
     fun chatItems(index: ArchiveIndex): List<ChatItem> = index.threads.map { t ->
-        val msgs = index.messages(t.key)
         ChatItem(
             key = t.key,
             name = t.title.ifBlank { t.key },
-            lastMessage = preview(msgs.lastOrNull()),
+            lastMessage = t.lastPreview,
             date = if (t.lastTsMs > 0) chatDate(t.lastTsMs) else "",
         )
     }
 
-    fun messageItems(index: ArchiveIndex, key: String): List<MessageItem> {
-        val me = index.detectMe(key)
+    fun messageItems(index: ArchiveIndex, key: String, selfName: String? = null): List<MessageItem> {
+        val me = selfName?.takeIf { it.isNotBlank() } ?: index.detectMe(key)
         val msgs = index.messages(key)
         val dayFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val dayLabelFmt = SimpleDateFormat("EEEE, d MMMM yyyy", Locale.getDefault())
@@ -35,22 +34,29 @@ object UiMapping {
             } else {
                 null
             }
-            val images = m.media
-                .filter { it.kind in IMAGE_KINDS }
-                .mapNotNull { ref ->
-                    val mime = MediaResolver.mimeFor(ref.uri)
-                    if (mime == null || !mime.startsWith("image/")) return@mapNotNull null
-                    index.mediaFile(ref.uri)?.absolutePath
+            val images = ArrayList<String>()
+            val labels = LinkedHashSet<String>()
+            for (ref in m.media) {
+                val mime = MediaResolver.mimeFor(ref.uri)
+                if (ref.kind in IMAGE_KINDS && mime != null && mime.startsWith("image/")) {
+                    val f = index.mediaFile(ref.uri)
+                    if (f != null) {
+                        images.add(f.absolutePath)
+                        continue
+                    }
                 }
+                labels.add(labelFor(ref.kind))
+            }
             MessageItem(
                 sender = m.sender,
                 text = m.content ?: "",
                 time = timeFmt.format(Date(m.tsMs)),
                 isMe = me.isNotEmpty() && m.sender == me,
                 isUnsent = m.isUnsent,
-                hasImage = m.media.any { it.kind in IMAGE_KINDS },
-                hasVoice = m.media.any { it.kind in VOICE_KINDS },
                 imageFiles = images,
+                attachmentLabels = labels.toList(),
+                shareLink = m.share?.first?.takeIf { it.isNotBlank() },
+                shareText = m.share?.second?.takeIf { it.isNotBlank() },
                 reactions = m.reactions.map { it.second },
                 daySeparator = sep,
             )
@@ -69,12 +75,13 @@ object UiMapping {
         val out = ArrayList<SearchResult>()
         for (t in index.threads) {
             val name = t.title.ifBlank { t.key }
-            for (m in index.messages(t.key)) {
+            for ((index, m) in index.messages(t.key).withIndex()) {
                 val content = m.content ?: continue
                 if (!content.contains(q, ignoreCase = true)) continue
                 out.add(
                     SearchResult(
                         key = t.key,
+                        msgIndex = index,
                         chatName = name,
                         snippet = content,
                         date = dateFmt.format(Date(m.tsMs)),
@@ -87,20 +94,17 @@ object UiMapping {
         return out
     }
 
-    private val IMAGE_KINDS = setOf("photos", "videos", "gifs", "sticker")
-    private val VOICE_KINDS = setOf("audio_files", "files")
+    private val IMAGE_KINDS = setOf("photos", "gifs", "sticker")
 
-    private fun preview(m: KeptMessage?): String {
-        if (m == null) return ""
-        if (m.isUnsent) return "Message unsent"
-        val c = m.content?.takeIf { it.isNotBlank() }
-        if (c != null) return c
-        return when {
-            m.media.any { it.kind in IMAGE_KINDS } -> "Photo"
-            m.media.any { it.kind in VOICE_KINDS } -> "Voice note"
-            m.media.isNotEmpty() -> "Attachment"
-            else -> ""
-        }
+    /** Friendly label for a media kind that can't be previewed inline. */
+    private fun labelFor(kind: String): String = when (kind) {
+        "videos" -> "Video"
+        "audio_files" -> "Voice note"
+        "files" -> "File"
+        "gifs" -> "GIF"
+        "sticker" -> "Sticker"
+        "photos" -> "Photo"
+        else -> kind.replace('_', ' ')
     }
 
     private fun chatDate(tsMs: Long): String =

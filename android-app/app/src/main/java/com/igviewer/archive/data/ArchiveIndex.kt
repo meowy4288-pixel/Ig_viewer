@@ -1,7 +1,13 @@
 package com.igviewer.archive.data
 
 import org.json.JSONException
+import java.io.BufferedInputStream
+import java.io.BufferedOutputStream
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.io.ObjectInputStream
+import java.io.ObjectOutputStream
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
@@ -17,14 +23,72 @@ import java.nio.charset.StandardCharsets
 class ArchiveIndex private constructor(
     val root: File,
     val threads: List<ThreadSummary>,
-    private val messagesByKey: Map<String, List<KeptMessage>>,
+    private val messagesByKey: MutableMap<String, List<KeptMessage>>,
     val skippedFiles: Int,
     val parseFailures: Int,
     val skipReasons: Map<SkipReason, Int>,
+    private val threadDir: File? = null,
 ) {
-    fun messages(key: String): List<KeptMessage> = messagesByKey[key].orEmpty()
+    @Synchronized
+    fun messages(key: String): List<KeptMessage> {
+        messagesByKey[key]?.let { return it }
+        val dir = threadDir ?: return emptyList()
+        val f = File(dir, keyFileName(key))
+        val loaded = (loadThread(f) ?: emptyList())
+        messagesByKey[key] = loaded
+        return loaded
+    }
+
+    private fun keyFileName(key: String): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        return digest.digest(key.toByteArray()).joinToString("") { "%02x".format(it) }
+    }
+
+    private fun loadThread(file: File): List<KeptMessage>? {
+        return try {
+            ObjectInputStream(BufferedInputStream(FileInputStream(file))).use {
+                it.readObject() as List<KeptMessage>
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
 
     fun thread(key: String): ThreadSummary? = threads.firstOrNull { it.key == key }
+
+    /**
+     * Persist the indexed data so the next launch can reopen it without reparsing the
+     * export. Only the derived result is stored (threads + kept messages + counts);
+     * media is still resolved from [root] on demand, so the export stays read-only.
+     * The file lives in the app's private storage and is removed by "Delete index".
+     */
+    fun saveSnapshot(file: File) {
+        // Write manifest (threads + counts) — tiny, loads instantly.
+        file.parentFile?.mkdirs()
+        ObjectOutputStream(BufferedOutputStream(FileOutputStream(file))).use { out ->
+            out.writeObject(
+                Persisted(
+                    rootPath = root.absolutePath,
+                    threads = ArrayList(threads),
+                    skippedFiles = skippedFiles,
+                    parseFailures = parseFailures,
+                    skipReasons = HashMap(skipReasons),
+                )
+            )
+        }
+        // Write per-thread message files for lazy loading.
+        val threadDir = File(file.parentFile, "threads")
+        threadDir.deleteRecursively()
+        threadDir.mkdirs()
+        for ((key, msgs) in messagesByKey) {
+            if (msgs.isNotEmpty()) {
+                val f = File(threadDir, keyFileName(key))
+                ObjectOutputStream(BufferedOutputStream(FileOutputStream(f))).use { out ->
+                    out.writeObject(msgs)
+                }
+            }
+        }
+    }
 
     /**
      * Resolve a media URI to a file inside the export, tolerant of the two known
@@ -73,7 +137,55 @@ class ArchiveIndex private constructor(
         return thread(key)?.participants?.firstOrNull() ?: ""
     }
 
+    /**
+     * Every distinct participant name across all threads, ranked by how many
+     * threads they appear in (descending), then alphabetically. Your own name
+     * usually tops this list because it is present in every thread.
+     */
+    fun allParticipantNames(): List<String> {
+        val freq = LinkedHashMap<String, Int>()
+        for (t in threads) {
+            for (p in t.participants) {
+                if (p.isBlank()) continue
+                freq[p] = (freq[p] ?: 0) + 1
+            }
+        }
+        return freq.entries
+            .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+            .map { it.key }
+    }
+
     companion object {
+        private val IMAGE_KINDS = setOf("photos", "gifs", "sticker")
+        private val VIDEO_KINDS = setOf("videos")
+        private val VOICE_KINDS = setOf("audio_files")
+
+        /**
+         * Reopen a previously saved index, or null when there is none or it cannot be
+         * read (e.g. written by an incompatible older build). Callers fall back to a
+         * fresh [index] then.
+         */
+        fun loadSnapshot(file: File): ArchiveIndex? {
+            if (!file.exists()) return null
+            return try {
+                val p = ObjectInputStream(BufferedInputStream(FileInputStream(file))).use {
+                    it.readObject() as Persisted
+                }
+                val threadDir = file.parentFile?.let { File(it, "threads") }
+                ArchiveIndex(
+                    root = File(p.rootPath),
+                    threads = p.threads,
+                    messagesByKey = mutableMapOf(),
+                    skippedFiles = p.skippedFiles,
+                    parseFailures = p.parseFailures,
+                    skipReasons = p.skipReasons,
+                    threadDir = threadDir,
+                )
+            } catch (_: Exception) {
+                null
+            }
+        }
+
         fun index(root: File): ArchiveIndex {
             val scan = Scanner.scan(root)
             val summaries = ArrayList<ThreadSummary>()
@@ -115,6 +227,7 @@ class ArchiveIndex private constructor(
 
                 val ingest = Ingest.ingestThread(title, participants, files)
                 byKey[t.key] = ingest.kept
+                val lastPreview = previewForChatList(ingest.kept)
                 summaries.add(
                     ThreadSummary(
                         key = t.key,
@@ -124,6 +237,7 @@ class ArchiveIndex private constructor(
                         rawCount = ingest.rawCount,
                         firstTsMs = ingest.kept.firstOrNull()?.tsMs ?: 0L,
                         lastTsMs = ingest.kept.lastOrNull()?.tsMs ?: 0L,
+                        lastPreview = lastPreview,
                     )
                 )
             }
@@ -135,14 +249,30 @@ class ArchiveIndex private constructor(
             return ArchiveIndex(
                 root = root,
                 threads = summaries,
-                messagesByKey = byKey,
+                messagesByKey = byKey.toMutableMap(),
                 skippedFiles = scan.totalSkipped,
                 parseFailures = parseFailures,
                 skipReasons = scan.skipped,
+                threadDir = null,
             )
         }
 
-        private fun isSymlink(f: File): Boolean =
+        private fun previewForChatList(msgs: List<KeptMessage>): String {
+        val m = msgs.lastOrNull() ?: return ""
+        if (m.isUnsent) return "Message unsent"
+        val c = m.content?.takeIf { it.isNotBlank() }
+        if (c != null) return c
+        return when {
+            m.media.any { it.kind in IMAGE_KINDS } -> "Photo"
+            m.media.any { it.kind in VIDEO_KINDS } -> "Video"
+            m.media.any { it.kind in VOICE_KINDS } -> "Voice note"
+            m.share != null -> "Shared post"
+            m.media.isNotEmpty() -> "Attachment"
+            else -> ""
+        }
+    }
+
+    private fun isSymlink(f: File): Boolean =
             try {
                 java.nio.file.Files.isSymbolicLink(f.toPath())
             } catch (_: Exception) {
@@ -175,6 +305,19 @@ class ArchiveIndex private constructor(
             } catch (_: Exception) {
                 String(body, StandardCharsets.ISO_8859_1)
             }
+        }
+    }
+
+    /** On-disk form of an index. Written and read only by this class. */
+    private class Persisted(
+        val rootPath: String,
+        val threads: List<ThreadSummary>,
+        val skippedFiles: Int,
+        val parseFailures: Int,
+        val skipReasons: Map<SkipReason, Int>,
+    ) : java.io.Serializable {
+        companion object {
+            private const val serialVersionUID = 1L
         }
     }
 }

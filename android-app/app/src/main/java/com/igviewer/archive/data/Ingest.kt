@@ -37,10 +37,13 @@ object Ingest {
         val sticker: MediaItem?,
         val files: List<MediaItem>?,
         val reactions: List<Reaction>?,
+        /** A shared post/reel: link + caption. Not part of the dedupe key. */
+        val share: Share?,
     )
 
     class MediaItem(val uri: String)
     class Reaction(val actor: String, val reaction: String)
+    class Share(val link: String, val shareText: String)
 
     class ParsedThread(
         val title: String,
@@ -129,6 +132,9 @@ object Ingest {
         sticker = o.optJSONObject("sticker")?.let { MediaItem(it.optString("uri", "")) },
         files = mediaList(o.optJSONArray("files")),
         reactions = reactionList(o.optJSONArray("reactions")),
+        share = o.optJSONObject("share")?.let {
+            Share(it.optString("link", ""), it.optString("share_text", ""))
+        },
     )
 
     private fun mediaList(arr: JSONArray?): List<MediaItem>? {
@@ -194,6 +200,7 @@ object Ingest {
                         callDuration = m.callDuration,
                         media = mediaRefs(m),
                         reactions = m.reactions.orEmpty().map { Text.fix(it.actor) to Text.fix(it.reaction) },
+                        share = m.share?.let { it.link to Text.fix(it.shareText) },
                     )
                 )
                 seq++

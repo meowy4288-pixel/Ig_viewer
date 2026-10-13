@@ -40,6 +40,8 @@ import com.igviewer.archive.ui.theme.Tokens
 
 data class SearchResult(
     val key: String,
+    /** Index into the chat's kept-message list, so the result can be scrolled to. */
+    val msgIndex: Int,
     val chatName: String,
     val snippet: String,
     val date: String,
@@ -50,7 +52,7 @@ data class SearchResult(
 fun SearchScreen(
     search: (String) -> List<SearchResult>,
     onBack: () -> Unit,
-    onResultClick: (String) -> Unit,
+    onResultClick: (String, Int) -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     val results = remember(query) { search(query) }
@@ -90,8 +92,8 @@ fun SearchScreen(
         when {
             query.length >= 2 && results.isEmpty() -> EmptyState("No messages match \"$query\".")
             else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(results, key = { it.key + it.snippet + it.time }) { result ->
-                    SearchResultRow(result, query) { onResultClick(result.key) }
+                items(results, key = { it.key + it.msgIndex + it.snippet + it.time }) { result ->
+                    SearchResultRow(result, query) { onResultClick(result.key, result.msgIndex) }
                 }
             }
         }

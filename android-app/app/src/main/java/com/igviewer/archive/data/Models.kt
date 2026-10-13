@@ -1,6 +1,7 @@
 package com.igviewer.archive.data
 
 import java.io.File
+import java.io.Serializable
 
 /** One media reference, with kind + index-within-kind so duplicates stay distinct. */
 data class MediaRef(
@@ -8,7 +9,7 @@ data class MediaRef(
     val mediaIndex: Int,
     /** Raw URI exactly as it appears in the JSON. Never passed through [Text.fix]. */
     val uri: String,
-)
+) : Serializable
 
 /** A message that survived dedupe, with its canonical position recorded. */
 data class KeptMessage(
@@ -22,7 +23,9 @@ data class KeptMessage(
     val callDuration: Long?,
     val media: List<MediaRef>,
     val reactions: List<Pair<String, String>>,
-)
+    /** Shared post/reel: (link, share_text). Link raw, text passed through [Text.fix]. */
+    val share: Pair<String, String>? = null,
+) : Serializable
 
 /** Result of ingesting a single thread. */
 data class ThreadIngest(
@@ -69,4 +72,6 @@ data class ThreadSummary(
     val rawCount: Int,
     val firstTsMs: Long,
     val lastTsMs: Long,
-)
+    /** Precomputed preview of the last message so the chat list never loads messages. */
+    val lastPreview: String = "",
+) : Serializable

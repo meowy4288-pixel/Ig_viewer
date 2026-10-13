@@ -69,6 +69,31 @@ class ScannerLayoutTest {
     }
 
     @Test
+    fun resolves_single_chat_zip_rooted_at_the_thread_folder() {
+        // A user zipped one conversation straight out of inbox: the archive holds just
+        // <thread>/message_1.json with no your_instagram_activity/messages path at all.
+        val root = tempRoot()
+        writeMessage(File(root, "kisa_17843228193076583"), "me", 1, "hi")
+        assertEquals("kisa_17843228193076583", ArchiveIndex.index(root).threads.single().key)
+    }
+
+    @Test
+    fun resolves_single_chat_zip_with_an_arbitrary_wrapper_folder() {
+        // No inbox anywhere; the thread folder sits under a wrapper the old scanner
+        // could not resolve. The bounded fallback should still find it.
+        val root = tempRoot()
+        writeMessage(File(root, "some-wrapper/solo"), "me", 1, "hi")
+        assertEquals("solo", ArchiveIndex.index(root).threads.single().key)
+    }
+
+    @Test
+    fun resolves_message_file_placed_directly_at_root() {
+        val root = tempRoot()
+        writeMessage(root, "me", 1, "hi")
+        assertEquals(root.name, ArchiveIndex.index(root).threads.single().key)
+    }
+
+    @Test
     fun bom_and_non_utf8_file_is_repaired_not_dropped() {
         val root = tempRoot()
         val dir = File(root, "your_instagram_activity/messages/inbox/frank")

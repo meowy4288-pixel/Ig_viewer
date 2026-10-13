@@ -104,67 +104,107 @@ object Scanner {
     class TooLargeException : Exception("too-large")
     class IoException : Exception("io-error")
 
+    /** Deepest wrapper nesting searched for a thread folder when there is no inbox. */
+    private const val MAX_DISCOVERY_DEPTH = 5
+
     /** Scan an export root for threads and their message files. */
     fun scan(root: File): ScanResult {
         val resultSkips = LinkedHashMap<SkipReason, Int>()
         val threads = ArrayList<ThreadScan>()
 
         val inbox = inboxDir(root)
-        if (!inbox.isDirectory || isSymlink(inbox)) return ScanResult(emptyList(), resultSkips)
-
-        val threadDirs = inbox.listFiles() ?: return ScanResult(emptyList(), resultSkips)
-
-        for (dir in threadDirs) {
-            val key = dir.name
-            if (key.isEmpty()) continue
-            if (isSymlink(dir)) {
-                bump(resultSkips, SkipReason.Symlink); continue
+        if (inbox.isDirectory && !isSymlink(inbox)) {
+            for (dir in inbox.listFiles().orEmpty()) {
+                scanThreadDir(dir, resultSkips)?.let { threads.add(it) }
             }
-            if (!dir.isDirectory) continue
+        }
 
-            val scanSkips = LinkedHashMap<SkipReason, Int>()
-
-            val entries = dir.listFiles()
-            if (entries == null) {
-                bump(scanSkips, SkipReason.ThreadUnreadable)
-                bump(resultSkips, SkipReason.ThreadUnreadable)
-                threads.add(ThreadScan(key, emptyList(), scanSkips))
-                continue
+        // Broadened fallback: a hand-built archive (e.g. one conversation zipped from
+        // inbox) may carry no `your_instagram_activity/messages/inbox` at all. Locate
+        // any directory that directly holds message_N.json files and treat each as a
+        // thread. The walk is bounded, and it does not descend past a folder that
+        // already qualifies, so it never wades through the media tree.
+        if (threads.isEmpty()) {
+            for (dir in findThreadDirs(root, MAX_DISCOVERY_DEPTH)) {
+                scanThreadDir(dir, resultSkips)?.let { threads.add(it) }
             }
-
-            // Group by parsed number so a duplicate group can be rejected whole.
-            val byNumber = sortedMapOf<Long, File>()
-            val duplicates = ArrayList<Long>()
-
-            for (p in entries) {
-                when (val parsed = parseFileNumber(p.name)) {
-                    is FileNo.NotMessage -> continue // not ours; ignore
-                    is FileNo.Overflow -> bump(scanSkips, SkipReason.FileNumberOverflow)
-                    is FileNo.Ok -> {
-                        if (isSymlink(p)) { bump(scanSkips, SkipReason.Symlink); continue }
-                        if (!p.isFile) continue
-                        if (p.length() > MAX_JSON_BYTES) { bump(scanSkips, SkipReason.TooLarge); continue }
-                        if (byNumber.put(parsed.n, p) != null) duplicates.add(parsed.n)
-                    }
-                }
-            }
-
-            for (n in duplicates) {
-                if (byNumber.remove(n) != null) {
-                    bump(scanSkips, SkipReason.DuplicateFileNumber)
-                    bump(resultSkips, SkipReason.DuplicateFileNumber)
-                }
-            }
-
-            val files = byNumber.values.toList()
-            for ((reason, n) in scanSkips) repeat(n) { bump(resultSkips, reason) }
-
-            if (files.isEmpty() && scanSkips.isEmpty()) continue
-            threads.add(ThreadScan(key, files, scanSkips))
         }
 
         threads.sortBy { it.key }
         return ScanResult(threads, resultSkips)
+    }
+
+    /** Scan one candidate thread directory. Returns null when it is not a thread. */
+    private fun scanThreadDir(dir: File, resultSkips: MutableMap<SkipReason, Int>): ThreadScan? {
+        val key = dir.name
+        if (key.isEmpty()) return null
+        if (isSymlink(dir)) {
+            bump(resultSkips, SkipReason.Symlink)
+            return null
+        }
+        if (!dir.isDirectory) return null
+
+        val scanSkips = LinkedHashMap<SkipReason, Int>()
+
+        val entries = dir.listFiles()
+        if (entries == null) {
+            bump(scanSkips, SkipReason.ThreadUnreadable)
+            bump(resultSkips, SkipReason.ThreadUnreadable)
+            return ThreadScan(key, emptyList(), scanSkips)
+        }
+
+        // Group by parsed number so a duplicate group can be rejected whole.
+        val byNumber = sortedMapOf<Long, File>()
+        val duplicates = ArrayList<Long>()
+
+        for (p in entries) {
+            when (val parsed = parseFileNumber(p.name)) {
+                is FileNo.NotMessage -> continue // not ours; ignore
+                is FileNo.Overflow -> bump(scanSkips, SkipReason.FileNumberOverflow)
+                is FileNo.Ok -> {
+                    if (isSymlink(p)) { bump(scanSkips, SkipReason.Symlink); continue }
+                    if (!p.isFile) continue
+                    if (p.length() > MAX_JSON_BYTES) { bump(scanSkips, SkipReason.TooLarge); continue }
+                    if (byNumber.put(parsed.n, p) != null) duplicates.add(parsed.n)
+                }
+            }
+        }
+
+        for (n in duplicates) {
+            if (byNumber.remove(n) != null) {
+                bump(scanSkips, SkipReason.DuplicateFileNumber)
+                bump(resultSkips, SkipReason.DuplicateFileNumber)
+            }
+        }
+
+        val files = byNumber.values.toList()
+        for ((reason, n) in scanSkips) repeat(n) { bump(resultSkips, reason) }
+
+        if (files.isEmpty() && scanSkips.isEmpty()) return null
+        return ThreadScan(key, files, scanSkips)
+    }
+
+    /** Bounded search for directories that directly contain a `message_N.json`. */
+    private fun findThreadDirs(base: File, maxDepth: Int): List<File> {
+        val out = ArrayList<File>()
+        val stack = ArrayDeque<Pair<File, Int>>()
+        stack.addLast(base to 0)
+        while (stack.isNotEmpty()) {
+            val (d, depth) = stack.removeLast()
+            val entries = d.listFiles() ?: continue
+            val holdsMessage = entries.any {
+                !isSymlink(it) && it.isFile && parseFileNumber(it.name) is FileNo.Ok
+            }
+            if (holdsMessage) {
+                out.add(d)
+                continue
+            }
+            if (depth >= maxDepth) continue
+            for (k in entries) {
+                if (k.isDirectory && !isSymlink(k)) stack.addLast(k to depth + 1)
+            }
+        }
+        return out
     }
 
     private fun bump(v: MutableMap<SkipReason, Int>, r: SkipReason) {
