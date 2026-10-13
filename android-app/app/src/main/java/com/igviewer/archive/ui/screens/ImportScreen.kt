@@ -21,12 +21,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.igviewer.archive.data.ImportProgress
+import com.igviewer.archive.data.formatBytes
 import com.igviewer.archive.ui.theme.Tokens
 
 @Composable
 fun ImportScreen(
     pickedName: String?,
     indexing: Boolean,
+    progress: ImportProgress?,
     status: String?,
     onPickZip: () -> Unit,
     onPickDir: () -> Unit,
@@ -89,13 +92,50 @@ fun ImportScreen(
         ) { Text("Index") }
         Spacer(Modifier.height(16.dp))
         if (indexing) {
-            LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth(),
-                color = Tokens.Accent,
-                trackColor = Tokens.Surface,
-            )
+            val fraction = progress?.fraction
+            if (fraction != null) {
+                LinearProgressIndicator(
+                    progress = { fraction },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Tokens.Accent,
+                    trackColor = Tokens.Surface,
+                )
+            } else {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Tokens.Accent,
+                    trackColor = Tokens.Surface,
+                )
+            }
             Spacer(Modifier.height(8.dp))
-            Text(text = "Indexing…", color = Tokens.Muted, fontSize = 13.sp)
+
+            val label = when (progress?.phase) {
+                ImportProgress.Phase.COPYING -> "Copying files…"
+                ImportProgress.Phase.EXTRACTING -> "Extracting archive…"
+                ImportProgress.Phase.INDEXING -> "Indexing chats…"
+                null -> "Working…"
+            }
+            Text(text = label, color = Tokens.Muted, fontSize = 13.sp)
+
+            val detail = progress?.let { p ->
+                buildString {
+                    when {
+                        p.totalBytes > 0 ->
+                            append("${formatBytes(p.doneBytes)} / ${formatBytes(p.totalBytes)}")
+                        p.totalItems > 0 ->
+                            append("${p.doneItems} / ${p.totalItems} chats")
+                    }
+                    val f = p.fraction
+                    if (f != null) {
+                        if (isNotEmpty()) append("  ·  ")
+                        append("${(f * 100).toInt()}%")
+                    }
+                }
+            }
+            if (!detail.isNullOrEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                Text(text = detail, color = Tokens.Muted, fontSize = 13.sp)
+            }
         }
         if (status != null) {
             Spacer(Modifier.height(12.dp))

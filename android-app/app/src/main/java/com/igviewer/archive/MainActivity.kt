@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.igviewer.archive.data.ArchiveIndex
 import com.igviewer.archive.data.ArchivePicker
+import com.igviewer.archive.data.ImportProgress
 import com.igviewer.archive.data.Prefs
 import com.igviewer.archive.data.UiMapping
 import com.igviewer.archive.ui.NavState
@@ -77,6 +78,7 @@ class MainActivity : ComponentActivity() {
 
     private val indexState: MutableState<ArchiveIndex?> = mutableStateOf(null)
     private val importStatus: MutableState<String?> = mutableStateOf(null)
+    private val importProgress: MutableState<ImportProgress?> = mutableStateOf(null)
 
     private val pickZip = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
@@ -98,6 +100,7 @@ class MainActivity : ComponentActivity() {
         val uri = pendingUri ?: run { onDone(false); return }
         val isFolder = pendingIsFolder
         importStatus.value = null
+        importProgress.value = null
         lifecycleScope.launch {
             runCatching {
                 val path = withContext(Dispatchers.IO) {
@@ -106,13 +109,20 @@ class MainActivity : ComponentActivity() {
                         // broad storage access; otherwise copy via SAF.
                         val direct = if (hasAllFilesAccess()) picker.directPath(uri) else null
                         if (direct != null) direct.absolutePath
-                        else picker.copyToAppStorage(uri, true, "export")
+                        else picker.copyToAppStorage(uri, true, "export") { importProgress.value = it }
                     } else {
-                        picker.extractZip(uri, picker.exportDir())
+                        picker.extractZip(uri, picker.exportDir()) { importProgress.value = it }
                     }
                 }
                 withContext(Dispatchers.IO) {
-                    val idx = ArchiveIndex.index(File(path))
+                    val idx = ArchiveIndex.index(File(path)) { done, total ->
+                        importProgress.value = ImportProgress(
+                            phase = ImportProgress.Phase.INDEXING,
+                            fraction = if (total > 0) done.toFloat() / total else null,
+                            doneItems = done,
+                            totalItems = total,
+                        )
+                    }
                     if (idx.threads.isNotEmpty()) {
                         runCatching { idx.saveSnapshot(snapshotFile) }
                     }
@@ -146,6 +156,7 @@ class MainActivity : ComponentActivity() {
                 importStatus.value = "Import failed: ${e.message}"
                 onDone(false)
             }
+            importProgress.value = null
         }
     }
 
@@ -172,6 +183,7 @@ class MainActivity : ComponentActivity() {
                 AppRoot(
                     indexState = indexState,
                     importStatus = importStatus,
+                    importProgress = importProgress,
                     prefs = prefs,
                     launchZipPicker = { cb -> onRenamed = cb; pickZip.launch(arrayOf("application/zip")) },
                     launchDirPicker = { cb -> onRenamed = cb; pickDir.launch(null) },
@@ -231,6 +243,7 @@ class MainActivity : ComponentActivity() {
 private fun AppRoot(
     indexState: MutableState<ArchiveIndex?>,
     importStatus: MutableState<String?>,
+    importProgress: MutableState<ImportProgress?>,
     prefs: Prefs,
     launchZipPicker: ((String) -> Unit) -> Unit,
     launchDirPicker: ((String) -> Unit) -> Unit,
@@ -357,6 +370,7 @@ private fun AppRoot(
             Screen.IMPORT -> ImportScreen(
                 pickedName = pickedName,
                 indexing = indexing,
+                progress = importProgress.value,
                 status = importStatus.value,
                 onPickZip = { launchZipPicker { name -> pickedName = name } },
                 onPickDir = { launchDirPicker { name -> pickedName = name } },

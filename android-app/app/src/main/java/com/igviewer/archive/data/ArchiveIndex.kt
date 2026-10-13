@@ -186,13 +186,14 @@ class ArchiveIndex private constructor(
             }
         }
 
-        fun index(root: File): ArchiveIndex {
+        fun index(root: File, onProgress: ((done: Int, total: Int) -> Unit)? = null): ArchiveIndex {
             val scan = Scanner.scan(root)
             val summaries = ArrayList<ThreadSummary>()
             val byKey = HashMap<String, List<KeptMessage>>()
             var parseFailures = 0
+            val totalThreads = scan.threads.size
 
-            for (t in scan.threads) {
+            for ((threadIndex, t) in scan.threads.withIndex()) {
                 // Files are already ascending by number from Scanner.
                 val files = ArrayList<Pair<Long, List<Ingest.RawMessage>>>()
                 var title = ""
@@ -223,7 +224,10 @@ class ArchiveIndex private constructor(
                     files.add(no to parsed.messages)
                 }
 
-                if (files.isEmpty()) continue
+                if (files.isEmpty()) {
+                    onProgress?.invoke(threadIndex + 1, totalThreads)
+                    continue
+                }
 
                 val ingest = Ingest.ingestThread(title, participants, files)
                 byKey[t.key] = ingest.kept
@@ -240,6 +244,7 @@ class ArchiveIndex private constructor(
                         lastPreview = lastPreview,
                     )
                 )
+                onProgress?.invoke(threadIndex + 1, totalThreads)
             }
 
             // Match the desktop list order: most recent thread first.

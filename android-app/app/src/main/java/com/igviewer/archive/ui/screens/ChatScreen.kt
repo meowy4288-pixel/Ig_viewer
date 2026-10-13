@@ -78,12 +78,15 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import java.util.TimeZone
 
 data class MessageItem(
     val sender: String,
     val text: String,
     val time: String,
     val isMe: Boolean,
+    /** Epoch millis, used by the date strip to jump to a day. */
+    val tsMs: Long = 0L,
     val isUnsent: Boolean = false,
     /** Labels for media that can't be previewed inline (Video, Voice note, File, ...). */
     val attachmentLabels: List<String> = emptyList(),
@@ -114,7 +117,6 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var pickerOpen by remember { mutableStateOf(false) }
-    var selectedDate by remember { mutableStateOf(Calendar.getInstance()) }
     var overlay by remember { mutableStateOf<String?>(null) }
 
     BackHandler(enabled = overlay != null) { overlay = null }
@@ -123,6 +125,23 @@ fun ChatScreen(
         val target = scrollToIndex ?: return@LaunchedEffect
         if (messages.isEmpty()) return@LaunchedEffect
         listState.scrollToItem(target.coerceIn(0, messages.lastIndex))
+    }
+
+    // The date strip reflects the day of the topmost visible message, so it reads as a
+    // position in the chat rather than today's date. Arrows and the picker move it.
+    val firstDayMs = remember(messages) {
+        messages.firstOrNull()?.tsMs?.let(::startOfDayMs) ?: startOfDayMs(System.currentTimeMillis())
+    }
+    val visibleDayMs: Long by remember(messages) {
+        derivedStateOf {
+            messages.getOrNull(listState.firstVisibleItemIndex)?.tsMs?.let(::startOfDayMs)
+                ?: firstDayMs
+        }
+    }
+    fun goToDay(dayMs: Long) {
+        if (messages.isEmpty()) return
+        val idx = messages.indexOfFirst { it.tsMs >= dayMs }
+        scope.launch { listState.scrollToItem(if (idx >= 0) idx else messages.lastIndex) }
     }
 
     val showJumpToTop by remember {
@@ -189,44 +208,52 @@ fun ChatScreen(
             Hairline()
 
             DateStrip(
-                selected = selectedDate,
-                onPrev = { selectedDate = shiftMonth(selectedDate, -1) },
-                onNext = { selectedDate = shiftMonth(selectedDate, +1) },
+                selectedMs = visibleDayMs,
+                onPrev = { goToDay(shiftDayMs(visibleDayMs, -1)) },
+                onNext = { goToDay(shiftDayMs(visibleDayMs, +1)) },
                 onOpenPicker = { pickerOpen = true },
             )
 
             if (messages.isEmpty()) {
                 EmptyState("No messages to show.")
             } else {
-                LazyColumn(
-                    state = listState,
+                // One constraint pass for the whole list; the bubble max width is then a
+                // plain value, avoiding a BoxWithConstraints (subcomposition) per message.
+                BoxWithConstraints(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
-                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 88.dp),
                 ) {
-                    itemsIndexed(messages, key = { i, _ -> i }) { i, msg ->
-                        val prev = messages.getOrNull(i - 1)
-                        val next = messages.getOrNull(i + 1)
-                        val groupedTop = prev != null && prev.isMe == msg.isMe && prev.daySeparator == null
-                        val groupedBottom = next != null && next.isMe == msg.isMe && next.daySeparator == null
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .then(
-                                    if (i == scrollToIndex) {
-                                        Modifier.background(Tokens.AccentDim)
-                                    } else {
-                                        Modifier
-                                    },
-                                ),
-                        ) {
-                            MessageBlock(
-                                msg = msg,
-                                groupedTop = groupedTop,
-                                groupedBottom = groupedBottom,
-                                onImageClick = { overlay = it },
-                            )
+                    val maxBubble = maxWidth * 0.8f
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 88.dp),
+                    ) {
+                        itemsIndexed(messages, key = { i, _ -> i }) { i, msg ->
+                            val prev = messages.getOrNull(i - 1)
+                            val next = messages.getOrNull(i + 1)
+                            val groupedTop = prev != null && prev.isMe == msg.isMe && prev.daySeparator == null
+                            val groupedBottom = next != null && next.isMe == msg.isMe && next.daySeparator == null
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .then(
+                                        if (i == scrollToIndex) {
+                                            Modifier.background(Tokens.AccentDim)
+                                        } else {
+                                            Modifier
+                                        },
+                                    ),
+                            ) {
+                                MessageBlock(
+                                    msg = msg,
+                                    groupedTop = groupedTop,
+                                    groupedBottom = groupedBottom,
+                                    maxBubble = maxBubble,
+                                    onImageClick = { overlay = it },
+                                )
+                            }
                         }
                     }
                 }
@@ -262,16 +289,13 @@ fun ChatScreen(
 
     if (pickerOpen) {
         val state = rememberDatePickerState(
-            initialSelectedDateMillis = selectedDate.timeInMillis,
+            initialSelectedDateMillis = visibleDayMs,
         )
         DatePickerDialog(
             onDismissRequest = { pickerOpen = false },
             confirmButton = {
                 TextButton(onClick = {
-                    state.selectedDateMillis?.let {
-                        val c = Calendar.getInstance().apply { timeInMillis = it }
-                        selectedDate = c
-                    }
+                    state.selectedDateMillis?.let { goToDay(utcDateToLocalStart(it)) }
                     pickerOpen = false
                 }) { Text("OK") }
             },
@@ -299,7 +323,7 @@ private fun SmallFab(light: Boolean, onClick: () -> Unit, content: @Composable (
 
 @Composable
 private fun DateStrip(
-    selected: Calendar,
+    selectedMs: Long,
     onPrev: () -> Unit,
     onNext: () -> Unit,
     onOpenPicker: () -> Unit,
@@ -312,10 +336,10 @@ private fun DateStrip(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onPrev, modifier = Modifier.size(40.dp)) {
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Previous month", tint = Tokens.Text)
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Previous day", tint = Tokens.Text)
             }
-            val label = remember(selected) {
-                SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(selected.time)
+            val label = remember(selectedMs) {
+                SimpleDateFormat("EEE, d MMM yyyy", Locale.getDefault()).format(selectedMs)
             }
             Box(
                 modifier = Modifier
@@ -330,7 +354,7 @@ private fun DateStrip(
                 Text(text = label, color = Tokens.Text, fontWeight = FontWeight.Medium)
             }
             IconButton(onClick = onNext, modifier = Modifier.size(40.dp)) {
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Next month", tint = Tokens.Text)
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Next day", tint = Tokens.Text)
             }
         }
         Hairline()
@@ -342,6 +366,7 @@ private fun MessageBlock(
     msg: MessageItem,
     groupedTop: Boolean,
     groupedBottom: Boolean,
+    maxBubble: androidx.compose.ui.unit.Dp,
     onImageClick: (String) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -358,7 +383,7 @@ private fun MessageBlock(
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
         }
-        MessageBubble(msg, groupedTop, groupedBottom, onImageClick)
+        MessageBubble(msg, groupedTop, groupedBottom, maxBubble, onImageClick)
     }
 }
 
@@ -367,6 +392,7 @@ private fun MessageBubble(
     msg: MessageItem,
     groupedTop: Boolean,
     groupedBottom: Boolean,
+    maxBubble: androidx.compose.ui.unit.Dp,
     onImageClick: (String) -> Unit,
 ) {
     val bg = if (msg.isMe) Tokens.Accent else Tokens.Surface
@@ -392,8 +418,7 @@ private fun MessageBubble(
         )
     }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(top = if (groupedTop) 2.dp else 10.dp)) {
-        val maxBubble = maxWidth * 0.8f
+    Box(modifier = Modifier.fillMaxWidth().padding(top = if (groupedTop) 2.dp else 10.dp)) {
         Box(
             modifier = Modifier
                 .align(if (msg.isMe) Alignment.CenterEnd else Alignment.CenterStart)
@@ -457,10 +482,32 @@ private fun MessageBubble(
     }
 }
 
-private fun shiftMonth(cal: Calendar, delta: Int): Calendar {
-    val c = cal.clone() as Calendar
-    c.add(Calendar.MONTH, delta)
-    return c
+/** Local midnight for the day containing [ms]. */
+private fun startOfDayMs(ms: Long): Long = Calendar.getInstance().apply {
+    timeInMillis = ms
+    set(Calendar.HOUR_OF_DAY, 0)
+    set(Calendar.MINUTE, 0)
+    set(Calendar.SECOND, 0)
+    set(Calendar.MILLISECOND, 0)
+}.timeInMillis
+
+/** [dayMs] shifted by whole days (DST-safe via Calendar), renormalised to midnight. */
+private fun shiftDayMs(dayMs: Long, delta: Int): Long = Calendar.getInstance().apply {
+    timeInMillis = dayMs
+    add(Calendar.DAY_OF_MONTH, delta)
+}.timeInMillis.let(::startOfDayMs)
+
+/**
+ * Material3's DatePicker reports the selection as UTC midnight of the chosen date.
+ * Convert that to local midnight so the strip and the jump agree with what the user
+ * picked regardless of timezone.
+ */
+private fun utcDateToLocalStart(utcMs: Long): Long {
+    val u = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = utcMs }
+    return Calendar.getInstance().apply {
+        clear()
+        set(u.get(Calendar.YEAR), u.get(Calendar.MONTH), u.get(Calendar.DAY_OF_MONTH))
+    }.timeInMillis
 }
 
 /** http(s) URLs only. Every other scheme stays inert text. */
@@ -548,10 +595,18 @@ private fun ShareCard(link: String?, text: String?, fg: Color) {
 
 @Composable
 private fun MediaImage(path: String, onClick: () -> Unit) {
-    val image by produceState<ImageBitmap?>(initialValue = null, path) {
-        value = withContext(Dispatchers.IO) {
-            runCatching { decodeScaled(path, 1280) }.getOrNull()
+    val key = cacheKey(path, THUMB_PX)
+    val image by produceState<ImageBitmap?>(initialValue = imageCache.get(key), path) {
+        val cached = imageCache.get(key)
+        if (cached != null) {
+            value = cached
+            return@produceState
         }
+        val bmp = withContext(Dispatchers.IO) {
+            runCatching { decodeScaled(path, THUMB_PX) }.getOrNull()
+        }
+        if (bmp != null) imageCache.put(key, bmp)
+        value = bmp
     }
     Box(
         modifier = Modifier
@@ -602,6 +657,16 @@ private fun ImageOverlay(path: String, onClose: () -> Unit) {
             Text(text = "Loading…", color = Tokens.Text)
         }
     }
+}
+
+/** Decode target for inline thumbnails; small enough to keep scrolling smooth. */
+private const val THUMB_PX = 640
+
+private fun cacheKey(path: String, maxPx: Int) = "$path@$maxPx"
+
+/** Byte-bounded cache so re-scrolling a chat does not re-decode the same photos. */
+private val imageCache = object : android.util.LruCache<String, ImageBitmap>(24 * 1024 * 1024) {
+    override fun sizeOf(key: String, value: ImageBitmap): Int = value.width * value.height * 4
 }
 
 private fun decodeScaled(path: String, maxPx: Int): ImageBitmap? {

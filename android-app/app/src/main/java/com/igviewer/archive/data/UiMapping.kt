@@ -52,6 +52,7 @@ object UiMapping {
                 text = m.content ?: "",
                 time = timeFmt.format(Date(m.tsMs)),
                 isMe = me.isNotEmpty() && m.sender == me,
+                tsMs = m.tsMs,
                 isUnsent = m.isUnsent,
                 imageFiles = images,
                 attachmentLabels = labels.toList(),

@@ -3,9 +3,11 @@ package com.igviewer.archive.data
 import android.content.Context
 import android.net.Uri
 import android.os.Environment
+import android.provider.OpenableColumns
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
 import java.util.zip.ZipInputStream
 
 /**
@@ -48,11 +50,17 @@ class ArchivePicker(private val context: Context) {
     }
 
     /** Copies a picked tree or file into app storage and returns the local path. */
-    fun copyToAppStorage(uri: Uri, isFolder: Boolean, destName: String): String {
+    fun copyToAppStorage(
+        uri: Uri,
+        isFolder: Boolean,
+        destName: String,
+        onProgress: ((ImportProgress) -> Unit)? = null,
+    ): String {
         val dest = File(context.filesDir, "imports/$destName")
         if (dest.exists()) dest.deleteRecursively()
         dest.parentFile?.mkdirs()
-        if (isFolder) copyTree(uri, uri, dest, 0) else copySingle(uri, dest)
+        if (isFolder) copyTree(uri, uri, dest, 0, IntArray(1), onProgress)
+        else copySingle(uri, dest, onProgress)
         check(dest.exists()) { "copy produced nothing from $uri" }
         return dest.absolutePath
     }
@@ -67,14 +75,32 @@ class ArchivePicker(private val context: Context) {
      * through the central directory with [java.util.zip.ZipFile], which knows the exact
      * per-entry sizes; it needs a seekable copy, so we spill the zip to cache first.
      */
-    fun extractZip(uri: Uri, destDir: File): String {
+    fun extractZip(
+        uri: Uri,
+        destDir: File,
+        onProgress: ((ImportProgress) -> Unit)? = null,
+    ): String {
         if (destDir.exists()) destDir.deleteRecursively()
         destDir.mkdirs()
+        // Progress tracks bytes consumed from the source stream against the zip's
+        // on-disk size -- a good proxy, since extracting media reads roughly the whole
+        // input. Reported at most every PROGRESS_STEP bytes to avoid spamming the UI.
+        val srcSize = uriSize(uri)
+        val report: (Long) -> Unit = { counted ->
+            onProgress?.invoke(
+                ImportProgress(
+                    phase = ImportProgress.Phase.EXTRACTING,
+                    fraction = if (srcSize > 0) (counted.toFloat() / srcSize).coerceIn(0f, 1f) else null,
+                    doneBytes = counted,
+                    totalBytes = if (srcSize > 0) srcSize else 0L,
+                )
+            )
+        }
         // "Unexpected end of ZLIB input stream" surfaces as EOFException, while a bad
         // method/size surfaces as ZipException. Both mean ZipInputStream could not make
         // sense of a streaming/data-descriptor zip, so either triggers the ZipFile retry.
         val inflateFailed = try {
-            extractStreaming(uri, destDir)
+            extractStreaming(uri, destDir, report)
             false
         } catch (e: java.io.EOFException) {
             true
@@ -84,20 +110,21 @@ class ArchivePicker(private val context: Context) {
         if (inflateFailed) {
             if (destDir.exists()) destDir.deleteRecursively()
             destDir.mkdirs()
-            extractViaZipFile(uri, destDir)
+            extractViaZipFile(uri, destDir, report)
         }
         check(destDir.isDirectory) { "extract produced nothing from $uri" }
         return destDir.absolutePath
     }
 
-    private fun extractStreaming(uri: Uri, destDir: File) {
+    private fun extractStreaming(uri: Uri, destDir: File, report: (Long) -> Unit) {
         val destCanon = destDir.canonicalFile
         var total = 0L
         var count = 0
         val buf = ByteArray(1 shl 16)
         context.contentResolver.openInputStream(uri).use { raw ->
             requireNotNull(raw) { "cannot open $uri" }
-            ZipInputStream(BufferedInputStream(raw)).use { zis ->
+            val counted = CountingInputStream(BufferedInputStream(raw), PROGRESS_STEP, report)
+            ZipInputStream(counted).use { zis ->
                 while (true) {
                     val entry = zis.nextEntry ?: break
                     val name = entry.name
@@ -132,12 +159,14 @@ class ArchivePicker(private val context: Context) {
         }
     }
 
-    private fun extractViaZipFile(uri: Uri, destDir: File) {
+    private fun extractViaZipFile(uri: Uri, destDir: File, report: (Long) -> Unit) {
         val tmp = File(context.cacheDir, "import.zip")
         tmp.delete()
         context.contentResolver.openInputStream(uri).use { raw ->
             requireNotNull(raw) { "cannot open $uri" }
-            tmp.outputStream().use { o -> raw.copyTo(o, 1 shl 16) }
+            val counted = CountingInputStream(BufferedInputStream(raw), PROGRESS_STEP, report)
+            tmp.outputStream().use { o -> counted.copyTo(o, 1 shl 16) }
+            counted.close() // emits the final 100% reading
         }
         try {
             java.util.zip.ZipFile(tmp).use { zip -> extractEntries(zip, destDir) }
@@ -184,19 +213,37 @@ class ArchivePicker(private val context: Context) {
         }
     }
 
-    private fun copySingle(uri: Uri, dest: java.io.File) {
+    private fun copySingle(
+        uri: Uri,
+        dest: java.io.File,
+        onProgress: ((ImportProgress) -> Unit)? = null,
+    ) {
         dest.parentFile?.mkdirs()
+        val size = uriSize(uri)
         context.contentResolver.openInputStream(uri).use { input ->
             requireNotNull(input) { "cannot open $uri" }
-            dest.outputStream().use { out -> input.copyTo(out, 1 shl 16) }
+            val counted = CountingInputStream(BufferedInputStream(input), PROGRESS_STEP) { done ->
+                onProgress?.invoke(
+                    ImportProgress(
+                        phase = ImportProgress.Phase.COPYING,
+                        fraction = if (size > 0) (done.toFloat() / size).coerceIn(0f, 1f) else null,
+                        doneBytes = done,
+                        totalBytes = if (size > 0) size else 0L,
+                    )
+                )
+            }
+            dest.outputStream().use { out -> counted.copyTo(out, 1 shl 16) }
+            counted.close()
         }
     }
 
     private fun copyTree(
         tree: Uri,
         uri: Uri,
-        dest: java.io.File,
+        dest: File,
         depth: Int,
+        fileCounter: IntArray,
+        onProgress: ((ImportProgress) -> Unit)? = null,
     ) {
         require(depth <= MAX_DEPTH) { "tree too deep" }
         dest.mkdirs()
@@ -239,13 +286,69 @@ class ArchivePicker(private val context: Context) {
 
         if (children.isEmpty()) {
             copySingle(uri, dest)
+            fileCounter[0]++
+            onProgress?.invoke(ImportProgress(ImportProgress.Phase.COPYING, doneItems = fileCounter[0]))
             return
         }
         for ((name, child, isDir) in children) {
             // Display names come from the provider; never trust them as path segments.
             if (name.isEmpty() || name == "." || name == ".." || name.contains('/')) continue
-            if (isDir) copyTree(tree, child, java.io.File(dest, name), depth + 1)
-            else copySingle(child, java.io.File(dest, name))
+            if (isDir) {
+                copyTree(tree, child, java.io.File(dest, name), depth + 1, fileCounter, onProgress)
+            } else {
+                copySingle(child, java.io.File(dest, name))
+                fileCounter[0]++
+                onProgress?.invoke(ImportProgress(ImportProgress.Phase.COPYING, doneItems = fileCounter[0]))
+            }
+        }
+    }
+
+    /** Total byte size a content URI advertises, or -1 when the provider won't say. */
+    private fun uriSize(uri: Uri): Long = runCatching {
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c ->
+            val i = c.getColumnIndex(OpenableColumns.SIZE)
+            if (i >= 0 && c.moveToFirst() && !c.isNull(i)) c.getLong(i) else -1L
+        } ?: -1L
+    }.getOrDefault(-1L)
+
+    /**
+     * Passes bytes through unchanged while reporting cumulative reads, but only once
+     * per [threshold] so a fast stream cannot flood the UI. [close] always reports the
+     * final total.
+     */
+    private class CountingInputStream(
+        private val delegate: InputStream,
+        private val threshold: Long,
+        private val onBytes: (Long) -> Unit,
+    ) : InputStream() {
+        private var count = 0L
+        private var last = 0L
+
+        private fun bump(delta: Int) {
+            count += delta
+            if (count - last >= threshold) {
+                last = count
+                onBytes(count)
+            }
+        }
+
+        override fun read(): Int {
+            val b = delegate.read()
+            if (b >= 0) bump(1)
+            return b
+        }
+
+        override fun read(b: ByteArray, off: Int, len: Int): Int {
+            val n = delegate.read(b, off, len)
+            if (n > 0) bump(n)
+            return n
+        }
+
+        override fun available(): Int = delegate.available()
+
+        override fun close() {
+            onBytes(count)
+            delegate.close()
         }
     }
 
@@ -253,5 +356,8 @@ class ArchivePicker(private val context: Context) {
         const val MAX_DEPTH = 32
         const val MAX_ZIP_FILES = 2_000_000
         const val MAX_ZIP_UNCOMPRESSED = 8L * 1024 * 1024 * 1024
+
+        /** Minimum bytes between progress callbacks, so a fast stream cannot flood the UI. */
+        const val PROGRESS_STEP = 4L * 1024 * 1024
     }
 }
