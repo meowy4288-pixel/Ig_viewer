@@ -1,13 +1,20 @@
 package com.igviewer.archive.ui.screens
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -20,6 +27,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -28,6 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Person
@@ -39,11 +49,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -51,12 +64,21 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.LinkInteractionListener
 import androidx.compose.ui.text.SpanStyle
@@ -68,9 +90,13 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import com.igviewer.archive.data.MediaInfo
 import com.igviewer.archive.ui.components.ArchAvatar
 import com.igviewer.archive.ui.components.EmptyState
 import com.igviewer.archive.ui.components.Hairline
+import com.igviewer.archive.ui.theme.LocalAnimations
+import com.igviewer.archive.ui.theme.LocalCompactRows
 import com.igviewer.archive.ui.theme.Tokens
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -88,17 +114,26 @@ data class MessageItem(
     /** Epoch millis, used by the date strip to jump to a day. */
     val tsMs: Long = 0L,
     val isUnsent: Boolean = false,
-    /** Labels for media that can't be previewed inline (Video, Voice note, File, ...). */
+    /** Call length in ms when this message is a call log, else null. */
+    val callDurationMs: Long? = null,
+    /** Labels for media that can't be previewed inline (File, or a missing attachment). */
     val attachmentLabels: List<String> = emptyList(),
     /** A shared post/reel link, when this message is one. */
     val shareLink: String? = null,
     val shareText: String? = null,
     /** Absolute, validated file paths of renderable images on this message. */
     val imageFiles: List<String> = emptyList(),
+    /** Absolute, validated file paths of voice notes / audio files on this message. */
+    val audioFiles: List<String> = emptyList(),
+    /** Absolute, validated file paths of videos on this message. */
+    val videoFiles: List<String> = emptyList(),
     val reactions: List<String> = emptyList(),
     /** Non-null on the first message of a calendar day; rendered as a centred header. */
     val daySeparator: String? = null,
 )
+
+/** One image or video in the per-chat gallery. */
+data class GalleryEntry(val path: String, val isVideo: Boolean)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -106,25 +141,91 @@ fun ChatScreen(
     chatName: String,
     messages: List<MessageItem>,
     onBack: () -> Unit,
-    onSearchClick: () -> Unit,
     /** When non-null, the list jumps to and highlights this kept-message index. */
     scrollToIndex: Int? = null,
     /** The display name treated as "you" in this chat, or null when auto-detected. */
     selfName: String? = null,
     /** Opens the per-chat "who are you" chooser. */
     onChooseSelf: () -> Unit = {},
+    /** Start video playback as soon as the full-screen player opens. */
+    autoplayVideos: Boolean = false,
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var pickerOpen by remember { mutableStateOf(false) }
     var overlay by remember { mutableStateOf<String?>(null) }
+    var videoOverlay by remember { mutableStateOf<String?>(null) }
+    var galleryOpen by remember { mutableStateOf(false) }
+    val mediaController = rememberMediaController()
 
-    BackHandler(enabled = overlay != null) { overlay = null }
+    // Every image + video in the chat, in message order, for the gallery.
+    val mediaEntries = remember(messages) {
+        val out = ArrayList<GalleryEntry>()
+        for (m in messages) {
+            m.imageFiles.forEach { out.add(GalleryEntry(it, isVideo = false)) }
+            m.videoFiles.forEach { out.add(GalleryEntry(it, isVideo = true)) }
+        }
+        out
+    }
+
+    // In-chat search state.
+    var searchOpen by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    var matches by remember { mutableStateOf<List<Int>>(emptyList()) }
+    var matchPos by remember { mutableIntStateOf(0) }
+    var highlightIndex by remember { mutableStateOf<Int?>(null) }
+    val searchFocus = remember { FocusRequester() }
+
+    fun closeSearch() {
+        searchOpen = false
+        query = ""
+        matches = emptyList()
+        highlightIndex = null
+    }
+
+    BackHandler(enabled = overlay != null || videoOverlay != null || searchOpen || galleryOpen) {
+        when {
+            videoOverlay != null -> videoOverlay = null
+            overlay != null -> overlay = null
+            galleryOpen -> galleryOpen = false
+            else -> closeSearch()
+        }
+    }
 
     LaunchedEffect(scrollToIndex, messages) {
         val target = scrollToIndex ?: return@LaunchedEffect
         if (messages.isEmpty()) return@LaunchedEffect
         listState.scrollToItem(target.coerceIn(0, messages.lastIndex))
+    }
+
+    LaunchedEffect(query, messages) {
+        val q = query.trim()
+        if (q.isEmpty()) {
+            matches = emptyList()
+            highlightIndex = null
+            return@LaunchedEffect
+        }
+        val found = messages.indices.filter { messages[it].text.contains(q, ignoreCase = true) }
+        matches = found
+        matchPos = 0
+        if (found.isNotEmpty()) {
+            highlightIndex = found[0]
+            listState.animateScrollToItem(found[0])
+        } else {
+            highlightIndex = null
+        }
+    }
+
+    LaunchedEffect(searchOpen) {
+        if (searchOpen) runCatching { searchFocus.requestFocus() }
+    }
+
+    fun goToMatch(delta: Int) {
+        if (matches.isEmpty()) return
+        matchPos = ((matchPos + delta) % matches.size + matches.size) % matches.size
+        val idx = matches[matchPos]
+        highlightIndex = idx
+        scope.launch { listState.animateScrollToItem(idx) }
     }
 
     // The date strip reflects the day of the topmost visible message, so it reads as a
@@ -201,11 +302,31 @@ fun ChatScreen(
                         tint = if (selfName.isNullOrBlank()) Tokens.Muted else Tokens.Accent,
                     )
                 }
-                IconButton(onClick = onSearchClick) {
-                    Icon(Icons.Default.Search, contentDescription = "Search this chat", tint = Tokens.Text)
+                IconButton(onClick = { galleryOpen = true }, enabled = mediaEntries.isNotEmpty()) {
+                    GridIcon(tint = if (mediaEntries.isEmpty()) Tokens.Muted else Tokens.Text)
+                }
+                IconButton(onClick = { if (searchOpen) closeSearch() else searchOpen = true }) {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = "Search this chat",
+                        tint = if (searchOpen) Tokens.Accent else Tokens.Text,
+                    )
                 }
             }
             Hairline()
+
+            if (searchOpen) {
+                SearchBar(
+                    query = query,
+                    onQueryChange = { query = it },
+                    count = matches.size,
+                    position = if (matches.isEmpty()) 0 else matchPos + 1,
+                    focusRequester = searchFocus,
+                    onPrev = { goToMatch(-1) },
+                    onNext = { goToMatch(+1) },
+                    onClose = { closeSearch() },
+                )
+            }
 
             DateStrip(
                 selectedMs = visibleDayMs,
@@ -239,7 +360,7 @@ fun ChatScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .then(
-                                        if (i == scrollToIndex) {
+                                        if (i == (highlightIndex ?: scrollToIndex)) {
                                             Modifier.background(Tokens.AccentDim)
                                         } else {
                                             Modifier
@@ -251,7 +372,9 @@ fun ChatScreen(
                                     groupedTop = groupedTop,
                                     groupedBottom = groupedBottom,
                                     maxBubble = maxBubble,
+                                    controller = mediaController,
                                     onImageClick = { overlay = it },
+                                    onVideoClick = { videoOverlay = it },
                                 )
                             }
                         }
@@ -282,8 +405,25 @@ fun ChatScreen(
             }
         }
 
+        if (galleryOpen) {
+            GalleryOverlay(
+                entries = mediaEntries,
+                onOpenImage = { overlay = it },
+                onOpenVideo = { videoOverlay = it },
+                onClose = { galleryOpen = false },
+            )
+        }
+
         overlay?.let { path ->
             ImageOverlay(path = path, onClose = { overlay = null })
+        }
+
+        videoOverlay?.let { path ->
+            VideoOverlay(
+                path = path,
+                onClose = { videoOverlay = null },
+                autoplay = autoplayVideos,
+            )
         }
     }
 
@@ -361,14 +501,73 @@ private fun DateStrip(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    count: Int,
+    position: Int,
+    focusRequester: FocusRequester,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onClose: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TextField(
+            value = query,
+            onValueChange = onQueryChange,
+            singleLine = true,
+            placeholder = { Text("Search this chat", color = Tokens.Muted) },
+            modifier = Modifier
+                .weight(1f)
+                .focusRequester(focusRequester),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = Tokens.Surface,
+                unfocusedContainerColor = Tokens.Surface,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                cursorColor = Tokens.Text,
+                focusedTextColor = Tokens.Text,
+                unfocusedTextColor = Tokens.Text,
+            ),
+        )
+        if (query.isNotEmpty()) {
+            Text(
+                text = if (count == 0) "0/0" else "$position/$count",
+                color = Tokens.Muted,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(horizontal = 4.dp),
+            )
+        }
+        IconButton(onClick = onPrev, enabled = count > 0) {
+            Icon(Icons.Default.KeyboardArrowUp, "Previous match", tint = Tokens.Text)
+        }
+        IconButton(onClick = onNext, enabled = count > 0) {
+            Icon(Icons.Default.KeyboardArrowDown, "Next match", tint = Tokens.Text)
+        }
+        IconButton(onClick = onClose) {
+            Icon(Icons.Default.Close, "Close search", tint = Tokens.Text)
+        }
+    }
+}
+
 @Composable
 private fun MessageBlock(
     msg: MessageItem,
     groupedTop: Boolean,
     groupedBottom: Boolean,
     maxBubble: androidx.compose.ui.unit.Dp,
+    controller: MediaPlayerController,
     onImageClick: (String) -> Unit,
+    onVideoClick: (String) -> Unit,
 ) {
+    val compact = LocalCompactRows.current
     Column(modifier = Modifier.fillMaxWidth()) {
         if (msg.daySeparator != null) {
             Text(
@@ -379,24 +578,30 @@ private fun MessageBlock(
                 fontSize = 14.sp,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 18.dp, bottom = 8.dp),
+                    .padding(top = if (compact) 10.dp else 18.dp, bottom = if (compact) 4.dp else 8.dp),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
         }
-        MessageBubble(msg, groupedTop, groupedBottom, maxBubble, onImageClick)
+        MessageBubble(msg, groupedTop, groupedBottom, maxBubble, controller, onImageClick, onVideoClick)
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MessageBubble(
     msg: MessageItem,
     groupedTop: Boolean,
     groupedBottom: Boolean,
     maxBubble: androidx.compose.ui.unit.Dp,
+    controller: MediaPlayerController,
     onImageClick: (String) -> Unit,
+    onVideoClick: (String) -> Unit,
 ) {
     val bg = if (msg.isMe) Tokens.Accent else Tokens.Surface
     val fg = if (msg.isMe) Tokens.OnAccent else Tokens.Text
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    val compact = LocalCompactRows.current
 
     val large = 18.dp
     val small = 4.dp
@@ -418,14 +623,27 @@ private fun MessageBubble(
         )
     }
 
-    Box(modifier = Modifier.fillMaxWidth().padding(top = if (groupedTop) 2.dp else 10.dp)) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = if (groupedTop) (if (compact) 1.dp else 2.dp) else (if (compact) 6.dp else 10.dp)),
+    ) {
         Box(
             modifier = Modifier
                 .align(if (msg.isMe) Alignment.CenterEnd else Alignment.CenterStart)
                 .widthIn(max = maxBubble)
                 .clip(shape)
                 .background(bg)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .combinedClickable(
+                    onClick = {},
+                    onLongClick = {
+                        if (msg.text.isNotBlank()) {
+                            clipboard.setText(AnnotatedString(msg.text))
+                            Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                )
+                .padding(horizontal = 12.dp, vertical = if (compact) 6.dp else 8.dp),
         ) {
             Column {
                 if (msg.isUnsent) {
@@ -441,6 +659,15 @@ private fun MessageBubble(
                     }
                     msg.imageFiles.forEach { path ->
                         MediaImage(path = path, onClick = { onImageClick(path) })
+                    }
+                    msg.audioFiles.forEach { path ->
+                        VoiceNoteBubble(path = path, fg = fg, bg = bg, controller = controller)
+                    }
+                    msg.videoFiles.forEach { path ->
+                        VideoThumb(path = path, fg = fg, onClick = { onVideoClick(path) })
+                    }
+                    if (msg.callDurationMs != null) {
+                        CallChip(durationMs = msg.callDurationMs, fg = fg)
                     }
                     msg.attachmentLabels.forEach { label ->
                         AttachmentChip(label = label, fg = fg)
@@ -546,6 +773,126 @@ private fun LinkText(text: String, color: Color, fontSize: androidx.compose.ui.u
     Text(text = annotated, color = color, fontSize = fontSize)
 }
 
+/** A 2x2 grid glyph, drawn because no grid icon ships in the core icon set. */
+@Composable
+private fun GridIcon(tint: Color) {
+    Canvas(modifier = Modifier.size(20.dp)) {
+        val gap = this.size.width * 0.16f
+        val cell = (this.size.width - gap) / 2f
+        val r = CornerRadius(cell * 0.22f, cell * 0.22f)
+        val cells = listOf(
+            Offset(0f, 0f),
+            Offset(cell + gap, 0f),
+            Offset(0f, cell + gap),
+            Offset(cell + gap, cell + gap),
+        )
+        for (o in cells) {
+            drawRoundRect(color = tint, topLeft = o, size = Size(cell, cell), cornerRadius = r)
+        }
+    }
+}
+
+/** A full-screen grid of every image and video in the chat. */
+@Composable
+private fun GalleryOverlay(
+    entries: List<GalleryEntry>,
+    onOpenImage: (String) -> Unit,
+    onOpenVideo: (String) -> Unit,
+    onClose: () -> Unit,
+) {
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { shown = true }
+    val animations = LocalAnimations.current
+    val fade by animateFloatAsState(if (shown) 1f else 0f, tween(if (animations) 160 else 0), label = "gallery")
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .alpha(fade)
+            .background(Tokens.Bg),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onClose) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Close gallery", tint = Tokens.Text)
+            }
+            Text(
+                text = "Media · ${entries.size}",
+                color = Tokens.Text,
+                fontFamily = Tokens.Serif,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 17.sp,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Hairline()
+        if (entries.isEmpty()) {
+            EmptyState("No media in this chat.")
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                items(entries.size) { i ->
+                    val e = entries[i]
+                    GridMedia(
+                        path = e.path,
+                        isVideo = e.isVideo,
+                        onClick = { if (e.isVideo) onOpenVideo(e.path) else onOpenImage(e.path) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GridMedia(path: String, isVideo: Boolean, onClick: () -> Unit) {
+    val bmp by produceState<ImageBitmap?>(initialValue = null, path, isVideo) {
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                if (isVideo) {
+                    MediaInfo.poster(path, 320)?.asImageBitmap()
+                } else {
+                    decodeScaled(path, 320)
+                }
+            }.getOrNull()
+        }
+    }
+    Box(
+        modifier = Modifier
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(6.dp))
+            .background(Tokens.Surface)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        val img = bmp
+        if (img != null) {
+            Image(
+                bitmap = img,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        if (isVideo) {
+            PlayPauseBadge(
+                playing = false,
+                fg = Color.White,
+                bg = Color.Black.copy(alpha = 0.5f),
+                size = 30.dp,
+            )
+        }
+    }
+}
+
 /** A small bordered chip naming a non-previewable attachment (Video, GIF, File, ...). */
 @Composable
 private fun AttachmentChip(label: String, fg: Color) {
@@ -558,6 +905,23 @@ private fun AttachmentChip(label: String, fg: Color) {
             .padding(horizontal = 10.dp, vertical = 5.dp),
     ) {
         Text(text = "[$label]", color = fg.copy(alpha = 0.85f), fontSize = 13.sp)
+    }
+}
+
+/** A call log entry: a bordered chip naming the call and its length when known. */
+@Composable
+private fun CallChip(durationMs: Long, fg: Color) {
+    val length = MediaInfo.formatDuration(durationMs)
+    val label = if (length.isEmpty()) "Call" else "Call · $length"
+    Box(
+        modifier = Modifier
+            .padding(top = 4.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Tokens.Bg)
+            .border(1.dp, Tokens.Line, RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+    ) {
+        Text(text = label, color = fg.copy(alpha = 0.85f), fontSize = 13.sp)
     }
 }
 
@@ -595,8 +959,11 @@ private fun ShareCard(link: String?, text: String?, fg: Color) {
 
 @Composable
 private fun MediaImage(path: String, onClick: () -> Unit) {
+    val isGif = path.endsWith(".gif", ignoreCase = true)
+    val canAnimate = isGif && android.os.Build.VERSION.SDK_INT >= 28
     val key = cacheKey(path, THUMB_PX)
-    val image by produceState<ImageBitmap?>(initialValue = imageCache.get(key), path) {
+    val image by produceState<ImageBitmap?>(initialValue = imageCache.get(key), path, canAnimate) {
+        if (canAnimate) return@produceState
         val cached = imageCache.get(key)
         if (cached != null) {
             value = cached
@@ -617,18 +984,44 @@ private fun MediaImage(path: String, onClick: () -> Unit) {
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        val img = image
-        if (img != null) {
-            Image(
-                bitmap = img,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
+        if (canAnimate) {
+            AnimatedGif(path = path, modifier = Modifier.fillMaxSize())
         } else {
-            Text(text = "Image", color = Tokens.Muted, fontSize = 13.sp)
+            val img = image
+            if (img != null) {
+                Image(
+                    bitmap = img,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Text(text = "Image", color = Tokens.Muted, fontSize = 13.sp)
+            }
         }
     }
+}
+
+/** Plays an animated GIF via ImageDecoder (API 28+); falls back to nothing on older ones. */
+@Composable
+private fun AnimatedGif(path: String, modifier: Modifier) {
+    AndroidView(
+        factory = { ctx ->
+            android.widget.ImageView(ctx).apply {
+                scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+                runCatching {
+                    val src = android.graphics.ImageDecoder.createSource(java.io.File(path))
+                    val drawable = android.graphics.ImageDecoder.decodeDrawable(src)
+                    setImageDrawable(drawable)
+                    if (drawable is android.graphics.drawable.AnimatedImageDrawable) {
+                        drawable.repeatCount = android.graphics.drawable.AnimatedImageDrawable.REPEAT_INFINITE
+                        drawable.start()
+                    }
+                }
+            }
+        },
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -638,9 +1031,14 @@ private fun ImageOverlay(path: String, onClose: () -> Unit) {
             runCatching { decodeScaled(path, 2048) }.getOrNull()
         }
     }
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { shown = true }
+    val animations = LocalAnimations.current
+    val fade by animateFloatAsState(if (shown) 1f else 0f, tween(if (animations) 160 else 0), label = "imageOverlay")
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .alpha(fade)
             .background(Color.Black.copy(alpha = 0.96f))
             .clickable(onClick = onClose),
         contentAlignment = Alignment.Center,

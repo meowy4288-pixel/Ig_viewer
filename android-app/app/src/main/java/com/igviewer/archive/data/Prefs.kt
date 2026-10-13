@@ -37,6 +37,31 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_SFX_ENABLED, true)
         set(value) = sp.edit().putBoolean(KEY_SFX_ENABLED, value).apply()
 
+    /** Selected theme variant id (see ThemeVariant); default is the dark palette. */
+    var themeId: String
+        get() = sp.getString(KEY_THEME_ID, "midnight") ?: "midnight"
+        set(value) = sp.edit().putString(KEY_THEME_ID, value).apply()
+
+    /** Global text scale multiplier applied on top of the system font scale. */
+    var textScale: Float
+        get() = sp.getFloat(KEY_TEXT_SCALE, 1f)
+        set(value) = sp.edit().putFloat(KEY_TEXT_SCALE, value).apply()
+
+    /** Whether message/list rows use tighter vertical padding. */
+    var compactRows: Boolean
+        get() = sp.getBoolean(KEY_COMPACT_ROWS, false)
+        set(value) = sp.edit().putBoolean(KEY_COMPACT_ROWS, value).apply()
+
+    /** Whether UI transitions and fade-in animations play. */
+    var animations: Boolean
+        get() = sp.getBoolean(KEY_ANIMATIONS, true)
+        set(value) = sp.edit().putBoolean(KEY_ANIMATIONS, value).apply()
+
+    /** Whether tapping a video thumbnail starts playback immediately. */
+    var autoplayVideos: Boolean
+        get() = sp.getBoolean(KEY_AUTOPLAY_VIDEOS, false)
+        set(value) = sp.edit().putBoolean(KEY_AUTOPLAY_VIDEOS, value).apply()
+
     /** Set once the user has seen (and dismissed) the all-files-access prompt. */
     var allFilesPromptDismissed: Boolean
         get() = sp.getBoolean(KEY_ALLFILES_DISMISSED, false)
@@ -61,5 +86,10 @@ class Prefs(context: Context) {
         const val KEY_SFX_ENABLED = "sfx_enabled"
         const val KEY_ALLFILES_DISMISSED = "allfiles_prompt_dismissed"
         const val KEY_EXPORT_PATH = "export_path"
+        const val KEY_THEME_ID = "theme_id"
+        const val KEY_TEXT_SCALE = "text_scale"
+        const val KEY_COMPACT_ROWS = "compact_rows"
+        const val KEY_ANIMATIONS = "animations"
+        const val KEY_AUTOPLAY_VIDEOS = "autoplay_videos"
     }
 }

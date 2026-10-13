@@ -35,6 +35,8 @@ object UiMapping {
                 null
             }
             val images = ArrayList<String>()
+            val audios = ArrayList<String>()
+            val videos = ArrayList<String>()
             val labels = LinkedHashSet<String>()
             for (ref in m.media) {
                 val mime = MediaResolver.mimeFor(ref.uri)
@@ -42,6 +44,20 @@ object UiMapping {
                     val f = index.mediaFile(ref.uri)
                     if (f != null) {
                         images.add(f.absolutePath)
+                        continue
+                    }
+                }
+                if (ref.kind == "audio_files" && mime != null && mime.startsWith("audio/")) {
+                    val f = index.mediaFile(ref.uri)
+                    if (f != null) {
+                        audios.add(f.absolutePath)
+                        continue
+                    }
+                }
+                if (ref.kind == "videos" && mime != null && mime.startsWith("video/")) {
+                    val f = index.mediaFile(ref.uri)
+                    if (f != null) {
+                        videos.add(f.absolutePath)
                         continue
                     }
                 }
@@ -54,7 +70,10 @@ object UiMapping {
                 isMe = me.isNotEmpty() && m.sender == me,
                 tsMs = m.tsMs,
                 isUnsent = m.isUnsent,
+                callDurationMs = m.callDuration,
                 imageFiles = images,
+                audioFiles = audios,
+                videoFiles = videos,
                 attachmentLabels = labels.toList(),
                 shareLink = m.share?.first?.takeIf { it.isNotBlank() },
                 shareText = m.share?.second?.takeIf { it.isNotBlank() },

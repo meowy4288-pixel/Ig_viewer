@@ -15,6 +15,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -28,6 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -41,6 +48,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
@@ -59,7 +68,10 @@ import com.igviewer.archive.ui.screens.ImportScreen
 import com.igviewer.archive.ui.screens.MessageItem
 import com.igviewer.archive.ui.screens.SearchScreen
 import com.igviewer.archive.ui.screens.SettingsScreen
+import com.igviewer.archive.ui.theme.AppSettings
 import com.igviewer.archive.ui.theme.IGArchiveTheme
+import com.igviewer.archive.ui.theme.LocalAnimations
+import com.igviewer.archive.ui.theme.LocalCompactRows
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -178,20 +190,29 @@ class MainActivity : ComponentActivity() {
                 ?.let { indexState.value = it }
         }
 
+        val settings = AppSettings(prefs)
         setContent {
-            IGArchiveTheme {
-                AppRoot(
-                    indexState = indexState,
-                    importStatus = importStatus,
-                    importProgress = importProgress,
-                    prefs = prefs,
-                    launchZipPicker = { cb -> onRenamed = cb; pickZip.launch(arrayOf("application/zip")) },
-                    launchDirPicker = { cb -> onRenamed = cb; pickDir.launch(null) },
-                    runImport = ::runImport,
-                    onGrantAccess = ::requestAllFilesAccess,
-                    hasAllFilesAccess = ::hasAllFilesAccess,
-                    onDeleteIndex = ::deleteIndex,
-                )
+            IGArchiveTheme(variant = settings.theme) {
+                val base = LocalDensity.current
+                CompositionLocalProvider(
+                    LocalCompactRows provides settings.compactRows,
+                    LocalAnimations provides settings.animations,
+                    LocalDensity provides Density(base.density, base.fontScale * settings.textScale),
+                ) {
+                    AppRoot(
+                        indexState = indexState,
+                        importStatus = importStatus,
+                        importProgress = importProgress,
+                        prefs = prefs,
+                        settings = settings,
+                        launchZipPicker = { cb -> onRenamed = cb; pickZip.launch(arrayOf("application/zip")) },
+                        launchDirPicker = { cb -> onRenamed = cb; pickDir.launch(null) },
+                        runImport = ::runImport,
+                        onGrantAccess = ::requestAllFilesAccess,
+                        hasAllFilesAccess = ::hasAllFilesAccess,
+                        onDeleteIndex = ::deleteIndex,
+                    )
+                }
             }
         }
     }
@@ -245,6 +266,7 @@ private fun AppRoot(
     importStatus: MutableState<String?>,
     importProgress: MutableState<ImportProgress?>,
     prefs: Prefs,
+    settings: AppSettings,
     launchZipPicker: ((String) -> Unit) -> Unit,
     launchDirPicker: ((String) -> Unit) -> Unit,
     runImport: ((Boolean) -> Unit) -> Unit,
@@ -257,9 +279,9 @@ private fun AppRoot(
     val chats = remember(index) { index?.let { UiMapping.chatItems(it) } ?: emptyList() }
     val context = LocalContext.current
     val sfx = remember { Sfx(context) }
-    var sfxEnabled by remember { mutableStateOf(prefs.sfxEnabled) }
     DisposableEffect(sfx) { onDispose { sfx.release() } }
-    SideEffect { sfx.enabled = sfxEnabled }
+    SideEffect { sfx.enabled = settings.sfxEnabled }
+    val animations = LocalAnimations.current
 
     var lightboxVisible by remember { mutableStateOf(false) }
     var pickedName by remember { mutableStateOf<String?>(null) }
@@ -366,7 +388,15 @@ private fun AppRoot(
             .background(com.igviewer.archive.ui.theme.Tokens.Bg)
             .statusBarsPadding(),
     ) {
-        when (nav.current) {
+        AnimatedContent(
+            targetState = nav.current,
+            transitionSpec = {
+                val d = if (animations) 180 else 0
+                (fadeIn(tween(d)) + slideInHorizontally { it / 14 }) togetherWith fadeOut(tween(if (animations) 120 else 0))
+            },
+            label = "screen",
+        ) { screen ->
+            when (screen) {
             Screen.IMPORT -> ImportScreen(
                 pickedName = pickedName,
                 indexing = indexing,
@@ -402,10 +432,10 @@ private fun AppRoot(
                     chatName = key?.let { index?.thread(it)?.title?.ifBlank { it } } ?: "",
                     messages = chatMessages,
                     onBack = { sfx.tap(); nav.back() },
-                    onSearchClick = { sfx.tap(); nav.navigate(Screen.SEARCH) },
                     scrollToIndex = targetMsgIndex,
                     selfName = chatSelf,
                     onChooseSelf = { sfx.tap(); key?.let { threadChooserKey = it } },
+                    autoplayVideos = settings.autoplayVideos,
                 )
             }
             Screen.SEARCH -> SearchScreen(
@@ -430,12 +460,9 @@ private fun AppRoot(
                 onGrantAccess = onGrantAccess,
                 meName = selfGlobal,
                 onChooseMe = { globalChooser = true },
-                sfxEnabled = sfxEnabled,
-                onSfxToggle = {
-                    sfxEnabled = it
-                    prefs.sfxEnabled = it
-                },
+                settings = settings,
             )
+            }
         }
 
         if (globalChooser) {
