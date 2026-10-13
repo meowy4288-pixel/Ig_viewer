@@ -39,29 +39,28 @@ object UiMapping {
             val videos = ArrayList<String>()
             val labels = LinkedHashSet<String>()
             for (ref in m.media) {
-                val mime = MediaResolver.mimeFor(ref.uri)
-                if (ref.kind in IMAGE_KINDS && mime != null && mime.startsWith("image/")) {
-                    val f = index.mediaFile(ref.uri)
-                    if (f != null) {
-                        images.add(f.absolutePath)
-                        continue
-                    }
+                // Only kinds we can render inline need the file resolved.
+                if (ref.kind !in IMAGE_KINDS && ref.kind != "audio_files" && ref.kind != "videos") {
+                    labels.add(labelFor(ref.kind))
+                    continue
                 }
-                if (ref.kind == "audio_files" && mime != null && mime.startsWith("audio/")) {
-                    val f = index.mediaFile(ref.uri)
-                    if (f != null) {
-                        audios.add(f.absolutePath)
-                        continue
-                    }
+                val file = index.mediaFile(ref.uri)
+                if (file == null) {
+                    labels.add(labelFor(ref.kind))
+                    continue
                 }
-                if (ref.kind == "videos" && mime != null && mime.startsWith("video/")) {
-                    val f = index.mediaFile(ref.uri)
-                    if (f != null) {
-                        videos.add(f.absolutePath)
-                        continue
-                    }
+                // Some exports name media with a bare timestamp and no extension; fall back
+                // to sniffing the bytes so those still render instead of becoming a chip.
+                val mime = MediaResolver.mimeFor(ref.uri) ?: MediaResolver.sniffMime(file)
+                when {
+                    ref.kind in IMAGE_KINDS && mime != null && mime.startsWith("image/") ->
+                        images.add(file.absolutePath)
+                    ref.kind == "audio_files" && isAudioContainer(mime) ->
+                        audios.add(file.absolutePath)
+                    ref.kind == "videos" && mime != null && mime.startsWith("video/") ->
+                        videos.add(file.absolutePath)
+                    else -> labels.add(labelFor(ref.kind))
                 }
-                labels.add(labelFor(ref.kind))
             }
             MessageItem(
                 sender = m.sender,
@@ -115,6 +114,19 @@ object UiMapping {
     }
 
     private val IMAGE_KINDS = setOf("photos", "gifs", "sticker")
+
+    /**
+     * Voice notes are stored by Instagram as AAC audio inside an `.mp4` (sometimes `.mov`)
+     * container, so [MediaResolver] reports them as a video MIME type. Accept both so a real audio
+     * file and an mp4-container audio file are both treated as playable audio.
+     */
+    internal fun isAudioContainer(mime: String?): Boolean = when {
+        mime == null -> false
+        mime.startsWith("audio/") -> true
+        mime == "video/mp4" -> true
+        mime == "video/quicktime" -> true
+        else -> false
+    }
 
     /** Friendly label for a media kind that can't be previewed inline. */
     private fun labelFor(kind: String): String = when (kind) {

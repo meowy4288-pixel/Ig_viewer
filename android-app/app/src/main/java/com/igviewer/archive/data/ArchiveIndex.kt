@@ -110,7 +110,11 @@ class ArchiveIndex private constructor(
         }
         val name = uri.substringAfterLast('/')
         if (name.isEmpty()) return null
-        return mediaIndex[name]
+        mediaIndex[name]?.let { return it }
+        // Some exports name media without any extension (a bare timestamp). Match by the
+        // name minus its extension so a URI's ".jpg" still finds an extensionless file,
+        // and vice-versa.
+        return stemIndex[name.substringBeforeLast('.')]
     }
 
     private val mediaIndex: Map<String, File> by lazy {
@@ -126,6 +130,15 @@ class ArchiveIndex private constructor(
                 if (k.isDirectory) stack.addLast(k to depth + 1)
                 else map.putIfAbsent(k.name, k)
             }
+        }
+        map
+    }
+
+    /** Files keyed by name without its extension, for extensionless media exports. */
+    private val stemIndex: Map<String, File> by lazy {
+        val map = HashMap<String, File>()
+        for ((name, file) in mediaIndex) {
+            map.putIfAbsent(name.substringBeforeLast('.'), file)
         }
         map
     }

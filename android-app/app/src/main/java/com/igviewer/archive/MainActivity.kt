@@ -436,6 +436,7 @@ private fun AppRoot(
                     selfName = chatSelf,
                     onChooseSelf = { sfx.tap(); key?.let { threadChooserKey = it } },
                     autoplayVideos = settings.autoplayVideos,
+                    chatKey = key.orEmpty(),
                 )
             }
             Screen.SEARCH -> SearchScreen(

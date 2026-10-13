@@ -62,6 +62,24 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_AUTOPLAY_VIDEOS, false)
         set(value) = sp.edit().putBoolean(KEY_AUTOPLAY_VIDEOS, value).apply()
 
+    /**
+     * The participant whose media/voice notes were last shown in this chat's library,
+     * or null for "All". Persisted so the choice survives closing the library and restarts.
+     */
+    fun galleryFilter(key: String): String? = sp.getString(KEY_GALLERY_FILTER + key, null)
+
+    fun setGalleryFilter(key: String, name: String?) {
+        sp.edit().apply {
+            if (name.isNullOrBlank()) remove(KEY_GALLERY_FILTER + key)
+            else putString(KEY_GALLERY_FILTER + key, name)
+        }.apply()
+    }
+
+    /** The last library tab shown for this chat (0 = media, 1 = voice notes). */
+    fun galleryTab(key: String): Int = sp.getInt(KEY_GALLERY_TAB + key, 0)
+
+    fun setGalleryTab(key: String, tab: Int) = sp.edit().putInt(KEY_GALLERY_TAB + key, tab).apply()
+
     /** Set once the user has seen (and dismissed) the all-files-access prompt. */
     var allFilesPromptDismissed: Boolean
         get() = sp.getBoolean(KEY_ALLFILES_DISMISSED, false)
@@ -84,6 +102,8 @@ class Prefs(context: Context) {
         const val KEY_GLOBAL_ME = "global_me"
         const val KEY_THREAD_ME = "thread_me:"
         const val KEY_SFX_ENABLED = "sfx_enabled"
+        const val KEY_GALLERY_FILTER = "gallery_filter:"
+        const val KEY_GALLERY_TAB = "gallery_tab:"
         const val KEY_ALLFILES_DISMISSED = "allfiles_prompt_dismissed"
         const val KEY_EXPORT_PATH = "export_path"
         const val KEY_THEME_ID = "theme_id"

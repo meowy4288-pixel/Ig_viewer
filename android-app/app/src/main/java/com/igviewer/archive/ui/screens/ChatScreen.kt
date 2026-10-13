@@ -1,5 +1,6 @@
 package com.igviewer.archive.ui.screens
 
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
@@ -10,6 +11,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +36,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -56,6 +62,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -74,7 +81,10 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
@@ -88,10 +98,12 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.igviewer.archive.data.MediaInfo
+import com.igviewer.archive.data.Prefs
 import com.igviewer.archive.ui.components.ArchAvatar
 import com.igviewer.archive.ui.components.EmptyState
 import com.igviewer.archive.ui.components.Hairline
@@ -101,6 +113,7 @@ import com.igviewer.archive.ui.theme.Tokens
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -132,8 +145,24 @@ data class MessageItem(
     val daySeparator: String? = null,
 )
 
-/** One image or video in the per-chat gallery. */
-data class GalleryEntry(val path: String, val isVideo: Boolean)
+/** One image or video in the per-chat gallery, tagged with its sender + message. */
+data class GalleryEntry(
+    val path: String,
+    val isVideo: Boolean,
+    val msgIndex: Int = -1,
+    val sender: String = "",
+)
+
+/** One voice note in the per-chat gallery, tagged with its sender + message. */
+data class VoiceEntry(
+    val path: String,
+    val msgIndex: Int = -1,
+    val sender: String = "",
+    val time: String = "",
+)
+
+/** A full-screen overlay target: a media path plus the message it came from. */
+data class OverlayTarget(val path: String, val msgIndex: Int? = null)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -149,24 +178,47 @@ fun ChatScreen(
     onChooseSelf: () -> Unit = {},
     /** Start video playback as soon as the full-screen player opens. */
     autoplayVideos: Boolean = false,
+    /** Stable per-chat key used to persist the library's participant filter and tab. */
+    chatKey: String = "",
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var pickerOpen by remember { mutableStateOf(false) }
-    var overlay by remember { mutableStateOf<String?>(null) }
-    var videoOverlay by remember { mutableStateOf<String?>(null) }
+    var overlay by remember { mutableStateOf<OverlayTarget?>(null) }
+    var videoOverlay by remember { mutableStateOf<OverlayTarget?>(null) }
     var galleryOpen by remember { mutableStateOf(false) }
     val mediaController = rememberMediaController()
 
     // Every image + video in the chat, in message order, for the gallery.
     val mediaEntries = remember(messages) {
         val out = ArrayList<GalleryEntry>()
-        for (m in messages) {
-            m.imageFiles.forEach { out.add(GalleryEntry(it, isVideo = false)) }
-            m.videoFiles.forEach { out.add(GalleryEntry(it, isVideo = true)) }
+        messages.forEachIndexed { i, m ->
+            m.imageFiles.forEach { out.add(GalleryEntry(it, isVideo = false, msgIndex = i, sender = m.sender)) }
+            m.videoFiles.forEach { out.add(GalleryEntry(it, isVideo = true, msgIndex = i, sender = m.sender)) }
         }
         out
     }
+    // Every voice note in the chat, for the voice-note gallery.
+    val voiceEntries = remember(messages) {
+        val out = ArrayList<VoiceEntry>()
+        messages.forEachIndexed { i, m ->
+            m.audioFiles.forEach { out.add(VoiceEntry(it, msgIndex = i, sender = m.sender, time = m.time)) }
+        }
+        out
+    }
+    // People who appear in this chat, for the gallery's sender chooser.
+    val participants = remember(messages) {
+        messages.map { it.sender }.filter { it.isNotBlank() }.distinct()
+    }
+
+    // Library state lives here (not inside the overlay) so it survives "View in chat",
+    // and is persisted per chat so it survives app restarts.
+    val context = LocalContext.current
+    val prefs = remember(context) { Prefs(context) }
+    var galleryTab by remember(chatKey) { mutableIntStateOf(prefs.galleryTab(chatKey)) }
+    var galleryFilter by remember(chatKey) { mutableStateOf(prefs.galleryFilter(chatKey)) }
+    // A persisted sender can go stale (re-import with different names); fall back to All.
+    val activeFilter = galleryFilter?.takeIf { it in participants }
 
     // In-chat search state.
     var searchOpen by remember { mutableStateOf(false) }
@@ -226,6 +278,17 @@ fun ChatScreen(
         val idx = matches[matchPos]
         highlightIndex = idx
         scope.launch { listState.animateScrollToItem(idx) }
+    }
+
+    /** Close any overlay and jump the chat list to [idx], highlighting that message. */
+    fun goToMessage(idx: Int) {
+        if (messages.isEmpty() || idx < 0) return
+        overlay = null
+        videoOverlay = null
+        galleryOpen = false
+        val target = idx.coerceIn(0, messages.lastIndex)
+        highlightIndex = target
+        scope.launch { listState.animateScrollToItem(target) }
     }
 
     // The date strip reflects the day of the topmost visible message, so it reads as a
@@ -302,8 +365,11 @@ fun ChatScreen(
                         tint = if (selfName.isNullOrBlank()) Tokens.Muted else Tokens.Accent,
                     )
                 }
-                IconButton(onClick = { galleryOpen = true }, enabled = mediaEntries.isNotEmpty()) {
-                    GridIcon(tint = if (mediaEntries.isEmpty()) Tokens.Muted else Tokens.Text)
+                IconButton(
+                    onClick = { galleryOpen = true },
+                    enabled = mediaEntries.isNotEmpty() || voiceEntries.isNotEmpty(),
+                ) {
+                    GridIcon(tint = if (mediaEntries.isEmpty() && voiceEntries.isEmpty()) Tokens.Muted else Tokens.Text)
                 }
                 IconButton(onClick = { if (searchOpen) closeSearch() else searchOpen = true }) {
                     Icon(
@@ -373,8 +439,8 @@ fun ChatScreen(
                                     groupedBottom = groupedBottom,
                                     maxBubble = maxBubble,
                                     controller = mediaController,
-                                    onImageClick = { overlay = it },
-                                    onVideoClick = { videoOverlay = it },
+                                    onImageClick = { overlay = OverlayTarget(it) },
+                                    onVideoClick = { videoOverlay = OverlayTarget(it) },
                                 )
                             }
                         }
@@ -407,22 +473,35 @@ fun ChatScreen(
 
         if (galleryOpen) {
             GalleryOverlay(
-                entries = mediaEntries,
-                onOpenImage = { overlay = it },
-                onOpenVideo = { videoOverlay = it },
+                media = mediaEntries,
+                voices = voiceEntries,
+                participants = participants,
+                controller = mediaController,
+                tab = galleryTab,
+                filter = activeFilter,
+                onTabChange = { galleryTab = it; prefs.setGalleryTab(chatKey, it) },
+                onFilterChange = { galleryFilter = it; prefs.setGalleryFilter(chatKey, it) },
+                onOpenImage = { e -> overlay = OverlayTarget(e.path, e.msgIndex) },
+                onOpenVideo = { e -> videoOverlay = OverlayTarget(e.path, e.msgIndex) },
+                onGoToChat = { idx -> goToMessage(idx) },
                 onClose = { galleryOpen = false },
             )
         }
 
-        overlay?.let { path ->
-            ImageOverlay(path = path, onClose = { overlay = null })
+        overlay?.let { target ->
+            ImageOverlay(
+                path = target.path,
+                onClose = { overlay = null },
+                onViewInChat = target.msgIndex?.let { idx -> { goToMessage(idx) } },
+            )
         }
 
-        videoOverlay?.let { path ->
+        videoOverlay?.let { target ->
             VideoOverlay(
-                path = path,
+                path = target.path,
                 onClose = { videoOverlay = null },
                 autoplay = autoplayVideos,
+                onViewInChat = target.msgIndex?.let { idx -> { goToMessage(idx) } },
             )
         }
     }
@@ -792,18 +871,33 @@ private fun GridIcon(tint: Color) {
     }
 }
 
-/** A full-screen grid of every image and video in the chat. */
+/**
+ * The per-chat library: photos/videos and voice notes, filterable by sender so you
+ * can view just one participant's media. Each item can jump back to its message.
+ */
 @Composable
 private fun GalleryOverlay(
-    entries: List<GalleryEntry>,
-    onOpenImage: (String) -> Unit,
-    onOpenVideo: (String) -> Unit,
+    media: List<GalleryEntry>,
+    voices: List<VoiceEntry>,
+    participants: List<String>,
+    controller: MediaPlayerController,
+    tab: Int,
+    filter: String?,
+    onTabChange: (Int) -> Unit,
+    onFilterChange: (String?) -> Unit,
+    onOpenImage: (GalleryEntry) -> Unit,
+    onOpenVideo: (GalleryEntry) -> Unit,
+    onGoToChat: (Int) -> Unit,
     onClose: () -> Unit,
 ) {
     var shown by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { shown = true }
     val animations = LocalAnimations.current
     val fade by animateFloatAsState(if (shown) 1f else 0f, tween(if (animations) 160 else 0), label = "gallery")
+
+    val shownMedia = remember(media, filter) { media.filter { filter == null || it.sender == filter } }
+    val shownVoices = remember(voices, filter) { voices.filter { filter == null || it.sender == filter } }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -820,7 +914,7 @@ private fun GalleryOverlay(
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, "Close gallery", tint = Tokens.Text)
             }
             Text(
-                text = "Media · ${entries.size}",
+                text = "Library",
                 color = Tokens.Text,
                 fontFamily = Tokens.Serif,
                 fontWeight = FontWeight.SemiBold,
@@ -828,28 +922,145 @@ private fun GalleryOverlay(
                 modifier = Modifier.weight(1f),
             )
         }
-        Hairline()
-        if (entries.isEmpty()) {
-            EmptyState("No media in this chat.")
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(6.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+
+        if (participants.size > 1) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items(entries.size) { i ->
-                    val e = entries[i]
-                    GridMedia(
-                        path = e.path,
-                        isVideo = e.isVideo,
-                        onClick = { if (e.isVideo) onOpenVideo(e.path) else onOpenImage(e.path) },
-                    )
+                FilterPill(label = "All", selected = filter == null, onClick = { onFilterChange(null) })
+                participants.forEach { p ->
+                    FilterPill(label = p, selected = filter == p, onClick = { onFilterChange(p) })
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            FilterPill(
+                label = "Photos & videos · ${shownMedia.size}",
+                selected = tab == 0,
+                onClick = { onTabChange(0) },
+            )
+            FilterPill(
+                label = "Voice notes · ${shownVoices.size}",
+                selected = tab == 1,
+                onClick = { onTabChange(1) },
+            )
+        }
+        Hairline()
+
+        if (tab == 0) {
+            if (shownMedia.isEmpty()) {
+                EmptyState("No photos or videos from this person.")
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(3),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    items(shownMedia.size) { i ->
+                        val e = shownMedia[i]
+                        GridMedia(
+                            path = e.path,
+                            isVideo = e.isVideo,
+                            onClick = { if (e.isVideo) onOpenVideo(e) else onOpenImage(e) },
+                        )
+                    }
+                }
+            }
+        } else {
+            if (shownVoices.isEmpty()) {
+                EmptyState("No voice notes from this person.")
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(shownVoices.size) { i ->
+                        val e = shownVoices[i]
+                        VoiceLibraryRow(
+                            entry = e,
+                            controller = controller,
+                            onGoToChat = { onGoToChat(e.msgIndex) },
+                        )
+                    }
                 }
             }
         }
     }
+}
+
+/** A pill used for the participant filter and the media/voice tabs. */
+@Composable
+private fun FilterPill(label: String, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (selected) Tokens.Accent else Tokens.Surface)
+            .border(1.dp, if (selected) Tokens.Accent else Tokens.Line, RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+    ) {
+        Text(
+            text = label,
+            color = if (selected) Tokens.OnAccent else Tokens.Text,
+            fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1,
+        )
+    }
+}
+
+/** A playable voice note row in the library, with a jump-to-message action. */
+@Composable
+private fun VoiceLibraryRow(
+    entry: VoiceEntry,
+    controller: MediaPlayerController,
+    onGoToChat: () -> Unit,
+) {
+    val playing = controller.currentKey == entry.path && controller.isPlaying
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PlayPauseBadge(
+            playing = playing,
+            fg = Tokens.OnAccent,
+            bg = Tokens.Accent,
+            size = 40.dp,
+            onClick = { controller.toggle(entry.path, Uri.fromFile(File(entry.path))) },
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 12.dp),
+        ) {
+            Text(
+                text = entry.sender.ifBlank { "Voice note" },
+                color = Tokens.Text,
+                fontSize = 15.sp,
+                maxLines = 1,
+            )
+            Text(
+                text = entry.time,
+                color = Tokens.Muted,
+                fontSize = 12.sp,
+            )
+        }
+        TextButton(onClick = onGoToChat) {
+            Text("View in chat", color = Tokens.Accent, fontSize = 13.sp)
+        }
+    }
+    Hairline()
 }
 
 @Composable
@@ -1025,7 +1236,7 @@ private fun AnimatedGif(path: String, modifier: Modifier) {
 }
 
 @Composable
-private fun ImageOverlay(path: String, onClose: () -> Unit) {
+private fun ImageOverlay(path: String, onClose: () -> Unit, onViewInChat: (() -> Unit)? = null) {
     val image by produceState<ImageBitmap?>(initialValue = null, path) {
         value = withContext(Dispatchers.IO) {
             runCatching { decodeScaled(path, 2048) }.getOrNull()
@@ -1035,6 +1246,26 @@ private fun ImageOverlay(path: String, onClose: () -> Unit) {
     LaunchedEffect(Unit) { shown = true }
     val animations = LocalAnimations.current
     val fade by animateFloatAsState(if (shown) 1f else 0f, tween(if (animations) 160 else 0), label = "imageOverlay")
+
+    // Pinch-to-zoom / pan, with double-tap to toggle zoom. Reset whenever the image changes.
+    var scale by remember(path) { mutableFloatStateOf(1f) }
+    var offset by remember(path) { mutableStateOf(Offset.Zero) }
+    var boxSize by remember(path) { mutableStateOf(IntSize.Zero) }
+    fun clamp(o: Offset, s: Float): Offset {
+        if (s <= 1f) return Offset.Zero
+        val maxX = (s - 1f) * boxSize.width / 2f
+        val maxY = (s - 1f) * boxSize.height / 2f
+        return Offset(o.x.coerceIn(-maxX, maxX), o.y.coerceIn(-maxY, maxY))
+    }
+    val transformState = rememberTransformableState { zoomChange, panChange, _ ->
+        scale = (scale * zoomChange).coerceIn(1f, 5f)
+        offset = clamp(offset + panChange, scale)
+    }
+    fun resetZoom() {
+        scale = 1f
+        offset = Offset.Zero
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -1049,11 +1280,50 @@ private fun ImageOverlay(path: String, onClose: () -> Unit) {
                 bitmap = img,
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxWidth().padding(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp)
+                    .onSizeChanged { boxSize = it }
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        translationX = offset.x
+                        translationY = offset.y
+                    }
+                    .pointerInput(path) {
+                        detectTapGestures(
+                            onTap = { onClose() },
+                            onDoubleTap = { if (scale > 1f) resetZoom() else scale = 2.5f },
+                        )
+                    }
+                    .transformable(transformState),
             )
         } else {
             Text(text = "Loading…", color = Tokens.Text)
         }
+        if (onViewInChat != null) {
+            ViewInChatButton(
+                onClick = onViewInChat,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 28.dp),
+            )
+        }
+    }
+}
+
+/** A translucent "View in chat" pill for the full-screen overlays. */
+@Composable
+internal fun ViewInChatButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color.Black.copy(alpha = 0.6f))
+            .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 9.dp),
+    ) {
+        Text(text = "View in chat", color = Color.White, fontSize = 14.sp)
     }
 }
 

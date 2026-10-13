@@ -405,7 +405,12 @@ fun VideoThumb(
 
 /** A full-screen video player backed by its own ExoPlayer. */
 @Composable
-fun VideoOverlay(path: String, onClose: () -> Unit, autoplay: Boolean = false) {
+fun VideoOverlay(
+    path: String,
+    onClose: () -> Unit,
+    autoplay: Boolean = false,
+    onViewInChat: (() -> Unit)? = null,
+) {
     val context = LocalContext.current
     val controller = remember { MediaPlayerController(context) }
     DisposableEffect(controller) {
@@ -446,6 +451,15 @@ fun VideoOverlay(path: String, onClose: () -> Unit, autoplay: Boolean = false) {
                 Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "Close video",
                 tint = Color.White,
+            )
+        }
+
+        if (onViewInChat != null) {
+            ViewInChatButton(
+                onClick = onViewInChat,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp),
             )
         }
 

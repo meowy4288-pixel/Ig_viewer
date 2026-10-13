@@ -52,6 +52,61 @@ object MediaResolver {
         return ALLOWED_MIME.firstOrNull { it.first == ext }?.second
     }
 
+    /**
+     * Detect a renderable MIME type from a file's leading bytes, for exports whose media
+     * files have no extension (Instagram sometimes names them with a bare timestamp).
+     * Returns null when the content is not a recognised image/audio/video/container.
+     */
+    fun sniffMime(file: File): String? {
+        val head = ByteArray(32)
+        val n = try {
+            file.inputStream().use { it.read(head) }
+        } catch (_: IOException) {
+            return null
+        }
+        fun ascii(off: Int, len: Int): String =
+            if (off + len <= n) String(head, off, len, Charsets.US_ASCII) else ""
+
+        if (n >= 3 && head[0] == 0xFF.toByte() && head[1] == 0xD8.toByte() && head[2] == 0xFF.toByte()) {
+            return "image/jpeg"
+        }
+        if (n >= 4 && head[0] == 0x89.toByte() && head[1] == 0x50.toByte() &&
+            head[2] == 0x4E.toByte() && head[3] == 0x47.toByte()
+        ) {
+            return "image/png"
+        }
+        if (ascii(0, 4) == "GIF8") return "image/gif"
+        if (ascii(0, 4) == "RIFF") {
+            when (ascii(8, 4)) {
+                "WEBP" -> return "image/webp"
+                "WAVE" -> return "audio/wav"
+                "AVI " -> return "video/x-msvideo"
+            }
+        }
+        if (n >= 2 && head[0] == 0x42.toByte() && head[1] == 0x4D.toByte()) return "image/bmp"
+        if (ascii(4, 4) == "ftyp") {
+            val brand = ascii(8, 4)
+            return when {
+                brand.startsWith("qt") -> "video/quicktime"
+                brand in setOf("heic", "heix", "hevc", "hevx", "heim", "heis", "hevm", "hevs", "mif1", "msf1") ->
+                    "image/heic"
+                brand.startsWith("M4A") -> "audio/mp4"
+                brand.startsWith("M4V") -> "video/mp4"
+                else -> "video/mp4"
+            }
+        }
+        if (ascii(0, 3) == "ID3") return "audio/mpeg"
+        if (n >= 2 && head[0] == 0xFF.toByte() && (head[1].toInt() and 0xE0) == 0xE0) return "audio/mpeg"
+        if (ascii(0, 4) == "OggS") return "audio/ogg"
+        if (ascii(0, 4) == "fLaC") return "audio/flac"
+        if (n >= 4 && head[0] == 0x1A.toByte() && head[1] == 0x45.toByte() &&
+            head[2] == 0xDF.toByte() && head[3] == 0xA3.toByte()
+        ) {
+            return "video/webm"
+        }
+        return null
+    }
+
     /** Validate a URI and resolve it to a file inside [root]. */
     fun resolve(root: File, uri: String): File {
         if (uri.isEmpty() || uri.startsWith('/') || uri.contains('\u0000')) {
