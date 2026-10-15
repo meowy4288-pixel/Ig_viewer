@@ -58,6 +58,26 @@ object MediaResolver {
      * Returns null when the content is not a recognised image/audio/video/container.
      */
     fun sniffMime(file: File): String? {
+        // The export is read-only, so a file's first bytes never change. Without this, every
+        // extensionless media reference re-opened and re-read the file from disk.
+        val key = sniffCacheKey(file)
+        if (key != null) {
+            val hit = sniffCache[key]
+            if (hit != null) return if (hit == SNIFF_MISS) null else hit
+        }
+        val detected = sniffBytes(file)
+        if (key != null) sniffCache[key] = detected ?: SNIFF_MISS
+        return detected
+    }
+
+    private fun sniffCacheKey(file: File): String? = try {
+        val t = file.lastModified()
+        if (t <= 0L) null else file.absolutePath + "@" + t
+    } catch (_: Exception) {
+        null
+    }
+
+    private fun sniffBytes(file: File): String? {
         val head = ByteArray(32)
         val n = try {
             file.inputStream().use { it.read(head) }
@@ -177,4 +197,118 @@ object MediaResolver {
         } catch (_: Exception) {
             false
         }
+
+    /**
+     * Locate the inbox directory, bounded to a couple of wrapper levels.
+     *
+     * Cheap by construction: it only ever lists directories and never walks media.
+     */
+    fun findInbox(root: File): File? {
+        val direct = listOf(
+            File(root, "inbox"),
+            File(root, "messages/inbox"),
+            File(root, "your_instagram_activity/messages/inbox"),
+        )
+        for (d in direct) if (d.isDirectory && !isSymlink(d)) return d
+        // One or two wrapper folders, e.g. instagram-user-2026-…/your_instagram_activity/…
+        for (l1 in (root.listFiles().orEmpty()).filter { it.isDirectory && !isSymlink(it) }) {
+            for (cand in listOf(
+                File(l1, "messages/inbox"),
+                File(l1, "your_instagram_activity/messages/inbox"),
+                File(l1, "inbox"),
+            )) {
+                if (cand.isDirectory && !isSymlink(cand)) return cand
+            }
+            for (l2 in (l1.listFiles().orEmpty()).filter { it.isDirectory && !isSymlink(it) }) {
+                val deep = File(l2, "your_instagram_activity/messages/inbox")
+                if (deep.isDirectory && !isSymlink(deep)) return deep
+                val mid = File(l2, "messages/inbox")
+                if (mid.isDirectory && !isSymlink(mid)) return mid
+            }
+        }
+        return null
+    }
+
+    /**
+     * Find a media file by bare name inside ONE thread's own media folders.
+     *
+     * This is the cheap path that replaces walking every media file in the archive. An
+     * export commonly names a file with a bare timestamp and no extension while the JSON
+     * URI still says ".jpg", so a straight path resolve misses and a name lookup finds it.
+     *
+     * Bounded and safe: [name] must be a bare filename, only the three known media
+     * subfolders are listed, and symlinks are refused. Returns null if it is not there.
+     */
+    fun resolveByBasename(root: File, threadKey: String, name: String): File? {
+        if (name.isEmpty() || name.length > 255) return null
+        if (name.contains('/') || name.contains('\\') || name.contains('\u0000')) return null
+        if (name == "." || name == "..") return null
+        // Thread keys may be namespaced as "<archive>\u00b7<thread>" when several exports
+        // were merged; the folder on disk is still the bare thread name.
+        val thread = threadKey.substringAfter('\u00b7')
+        val inbox = findInbox(root) ?: return null
+        val dir = File(inbox, thread)
+        if (!dir.isDirectory || isSymlink(dir)) return null
+
+        // Exact name first: one map hit covers the ordinary case, so the extension
+        // variants below only run when the export named the file differently.
+        val byName = threadMediaMap(root, threadKey) ?: return null
+
+        fun hit(key: String): File? {
+            val f = byName[key] ?: return null
+            return if (f.isFile && !isSymlink(f)) f else null
+        }
+
+        hit(name)?.let { return it }
+
+        // Exports disagree about which side carries the extension: the file on disk may be
+        // a bare timestamp while the URI says ".jpg", or the reverse.
+        val stem = name.substringBeforeLast('.', name)
+        if (stem.isNotEmpty() && stem != name) {
+            hit(stem)?.let { return it }
+            for (ext in KNOWN_MEDIA_EXTENSIONS) {
+                hit("$stem.$ext")?.let { return it }
+            }
+        }
+        return null
+    }
+
+    /** Placeholder for "sniffed, no type", so misses are cached too. */
+    private const val SNIFF_MISS = "\u0000miss"
+
+    private val sniffCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /**
+     * Cached listing of one thread's media folders, as file name -> file.
+     *
+     * The lookup below used to list all three directories and scan them linearly for EVERY
+     * media reference. With a few thousand media in a chat that is tens of thousands of
+     * comparisons per lookup, which is what made opening a chat take seconds. Built once
+     * per (archive, thread); lookups then cost one map hit.
+     */
+    private val threadMediaCache =
+        java.util.concurrent.ConcurrentHashMap<String, Map<String, File>>()
+
+    private val KNOWN_MEDIA_EXTENSIONS =
+        listOf("jpg", "jpeg", "png", "gif", "webp", "heic", "mp4", "mov", "m4a", "mp3", "ogg")
+
+    private fun threadMediaMap(root: File, threadKey: String): Map<String, File>? {
+        val thread = threadKey.substringAfter('\u00b7')
+        val cacheKey = root.absolutePath + "\u0000" + thread
+        threadMediaCache[cacheKey]?.let { return it }
+        val inbox = findInbox(root) ?: return null
+        val dir = File(inbox, thread)
+        if (!dir.isDirectory || isSymlink(dir)) return null
+        val map = HashMap<String, File>()
+        for (sub in listOf("photos", "videos", "audio")) {
+            val d = File(dir, sub)
+            if (!d.isDirectory || isSymlink(d)) continue
+            val entries = d.listFiles() ?: continue
+            for (f in entries) {
+                if (f.isFile && !isSymlink(f)) map.putIfAbsent(f.name, f)
+            }
+        }
+        threadMediaCache[cacheKey] = map
+        return map
+    }
 }

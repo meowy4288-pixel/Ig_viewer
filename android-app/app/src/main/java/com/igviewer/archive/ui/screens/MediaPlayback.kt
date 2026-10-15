@@ -7,7 +7,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -273,12 +275,14 @@ private fun SeekBar(frac: Float, enabled: Boolean, onSeek: (Float) -> Unit) {
 }
 
 /** An inline voice-note bubble: play/pause, seek bar, elapsed/total, speed. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun VoiceNoteBubble(
     path: String,
     fg: Color,
     bg: Color,
     controller: MediaPlayerController,
+    onLongPress: () -> Unit = {},
 ) {
     val isCurrent = controller.currentKey == path
     val playing = isCurrent && controller.isPlaying
@@ -297,6 +301,7 @@ fun VoiceNoteBubble(
     Row(
         modifier = Modifier
             .padding(top = 6.dp)
+            .combinedClickable(onClick = {}, onLongClick = onLongPress)
             .widthIn(min = 190.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -343,11 +348,13 @@ private fun speedLabel(speed: Float): String =
     if (speed == speed.toInt().toFloat()) "${speed.toInt()}x" else "${speed}x"
 
 /** A video thumbnail: poster frame, play glyph and a duration badge; tap to open. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun VideoThumb(
     path: String,
     fg: Color,
     onClick: () -> Unit,
+    onLongPress: () -> Unit = {},
 ) {
     val poster by produceState<ImageBitmap?>(initialValue = null, path) {
         value = withContext(Dispatchers.IO) {
@@ -365,7 +372,7 @@ fun VideoThumb(
             .size(width = 240.dp, height = 180.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(Tokens.Bg)
-            .clickable(onClick = onClick),
+            .combinedClickable(onClick = onClick, onLongClick = onLongPress),
         contentAlignment = Alignment.Center,
     ) {
         val img = poster

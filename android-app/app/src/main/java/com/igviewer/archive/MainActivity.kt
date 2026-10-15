@@ -1,5 +1,11 @@
 package com.igviewer.archive
 
+import com.igviewer.archive.data.formatBytes
+import com.igviewer.archive.ui.theme.Tokens
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Row
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -7,6 +13,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.provider.DocumentsContract
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -16,13 +23,11 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -41,6 +46,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -56,6 +62,7 @@ import androidx.lifecycle.lifecycleScope
 import com.igviewer.archive.data.ArchiveIndex
 import com.igviewer.archive.data.ArchivePicker
 import com.igviewer.archive.data.ImportProgress
+import com.igviewer.archive.data.NoteStore
 import com.igviewer.archive.data.Prefs
 import com.igviewer.archive.data.UiMapping
 import com.igviewer.archive.ui.NavState
@@ -66,21 +73,40 @@ import com.igviewer.archive.ui.screens.ChatListScreen
 import com.igviewer.archive.ui.screens.ChatScreen
 import com.igviewer.archive.ui.screens.ImportScreen
 import com.igviewer.archive.ui.screens.MessageItem
+import com.igviewer.archive.ui.screens.NoteResult
 import com.igviewer.archive.ui.screens.SearchScreen
 import com.igviewer.archive.ui.screens.SettingsScreen
 import com.igviewer.archive.ui.theme.AppSettings
 import com.igviewer.archive.ui.theme.IGArchiveTheme
 import com.igviewer.archive.ui.theme.LocalAnimations
+import com.igviewer.archive.ui.theme.MOTION_ENABLED
 import com.igviewer.archive.ui.theme.LocalCompactRows
+import com.igviewer.archive.ui.theme.LocalMotion
+import com.igviewer.archive.ui.theme.Motion
+import com.igviewer.archive.ui.theme.veil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import java.io.File
+
+
+/** First slice published immediately on a chat open, then regular slices after that. */
+private const val FIRST_CHUNK = 250
+private const val CHUNK = 400
 
 class MainActivity : ComponentActivity() {
     private lateinit var picker: ArchivePicker
     private lateinit var prefs: Prefs
     private var pendingUri: Uri? = null
+    private var pendingUris: List<Uri> = emptyList()
+
+    /**
+     * Exactly one pending selection at a time. Picking zips clears a folder choice and
+     * vice versa: an import always replaces the previous one, so importing a second
+     * export replaces your chats rather than silently merging into them.
+     */
+    private val pendingFolders = mutableListOf<Uri>()
     private var pendingIsFolder: Boolean = false
 
     private var onRenamed: ((String) -> Unit)? = null
@@ -92,42 +118,236 @@ class MainActivity : ComponentActivity() {
     private val importStatus: MutableState<String?> = mutableStateOf(null)
     private val importProgress: MutableState<ImportProgress?> = mutableStateOf(null)
 
-    private val pickZip = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let {
-            pendingUri = it
-            pendingIsFolder = false
-            onRenamed?.invoke("export.zip")
-        }
+    /** Several exports may be picked at once; the system picker gives long-press multi-select. */
+    private val pickZip = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        val list = uris.filterNotNull()
+        if (list.isEmpty()) return@registerForActivityResult
+        pendingUris = list
+        pendingFolders.clear()
+        // runImport() bails out immediately when pendingUri is null, so the single-file
+        // slot still has to point at the first item of the selection.
+        pendingUri = list.first()
+        pendingIsFolder = false
+        onRenamed?.invoke(if (list.size == 1) "export.zip" else "${list.size} archives")
     }
 
     private val pickDir = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         uri?.let {
+            pendingUris = emptyList()
+            if (!pendingFolders.contains(it)) pendingFolders.add(it)
             pendingUri = it
             pendingIsFolder = true
-            onRenamed?.invoke("export")
+            val n = pendingFolders.size
+            onRenamed?.invoke(if (n == 1) "export" else "$n folders")
         }
     }
 
+    /**
+     * Folder picker for the download destination. Kept separate from [pickDir] so choosing a
+     * download folder can never be mistaken for choosing an export to import.
+     */
+    private val pickDownloadDir =
+        registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+            uri?.let {
+                try {
+                    contentResolver.takePersistableUriPermission(
+                        it,
+                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                            android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                    )
+                } catch (_: SecurityException) {
+                    // Not all providers offer a persistable grant; the tree still works this session.
+                }
+                val name = runCatching {
+                    DocumentsContract.getTreeDocumentId(it).substringAfterLast(':').substringAfterLast('/')
+                }.getOrNull()
+                prefs.downloadTreeUri = it.toString()
+                prefs.downloadTreeName = name ?: "Chosen folder"
+            }
+        }
+
+    private var avatarVersion by mutableIntStateOf(0)
+
+    private val askDownloadFolder: () -> Unit = { pickDownloadDir.launch(null) }
+
+    /**
+     * Adds a folder that holds media referenced by the chats but lives outside every
+     * import root. Resolved to a real path where possible; otherwise a copy is made so the
+     * grant being revoked cannot break media that was already imported.
+     */
+    private val pickMediaFolder =
+        registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+            uri ?: return@registerForActivityResult
+            lifecycleScope.launch(Dispatchers.IO) {
+                val direct = if (hasAllFilesAccess()) picker.directPath(uri) else null
+                val path = direct?.absolutePath ?: runCatching {
+                    picker.copyToAppStorage(uri, true, "media-" + (prefs.mediaRoots.size + 1)) { null }
+                }.getOrNull()
+                if (path != null) {
+                    prefs.mediaRoots = prefs.mediaRoots + File(path)
+                    rebuildIndex()
+                } else {
+                    importStatus.value = "Could not read that folder"
+                }
+            }
+        }
+
+    /** Re-indexes every imported root plus the extra media folders, in place. */
+    private fun rebuildIndex() {
+        val roots = prefs.importedRoots.ifEmpty { prefs.savedExportPaths }.map { File(it) }
+        if (roots.isEmpty()) return
+        lifecycleScope.launch(Dispatchers.IO) {
+            val idx = runCatching {
+                ArchiveIndex.indexAll(roots, prefs.mediaRoots)
+            }.getOrNull() ?: return@launch
+            if (idx.threads.isNotEmpty()) {
+                runCatching { idx.saveSnapshot(snapshotFile) }
+                withContext(Dispatchers.Main) { indexState.value = idx }
+            }
+        }
+    }
+
+    /**
+     * Picks the photo shown on your own messages. The chosen image is COPIED into app
+     * storage rather than referenced by URI, so the avatar survives the temporary grant
+     * being revoked and never depends on the original file still existing.
+     */
+    /** The chat a picked photo belongs to. Null means the default photo for you. */
+    private var avatarChatKey: String? = null
+
+    /** The person's raw export name within that chat. Null means the default photo. */
+    private var avatarTarget: String? = null
+
+    private fun storeAvatar(
+        uri: android.net.Uri,
+        chatKey: String?,
+        target: String?,
+    ) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val ext = (contentResolver.getType(uri) ?: "image/jpeg").substringAfterLast('/')
+                .takeIf { it.isNotBlank() && it.length <= 5 } ?: "jpeg"
+            runCatching {
+                // Contact photos are keyed by a hash of the raw name so the filename is
+                // always safe and never contains a path separator.
+                val dir = if (target == null) filesDir else filesDir.resolve("avatars")
+                dir.mkdirs()
+                val stem = if (target == null) {
+                    "avatar"
+                } else {
+                    java.security.MessageDigest.getInstance("SHA-256")
+                        .digest(target.toByteArray())
+                        .joinToString("") { "%02x".format(it) }
+                        .take(24)
+                }
+                val dest = dir.resolve("$stem.$ext")
+                contentResolver.openInputStream(uri)?.use { input ->
+                    dest.outputStream().use { input.copyTo(it) }
+                } ?: error("Could not open that image")
+                if (chatKey != null && target != null) {
+                    prefs.setContactAvatar(chatKey, target, dest.absolutePath)
+                }
+                withContext(Dispatchers.Main) { avatarVersion++ }
+            }.onFailure {
+                importStatus.value = "Could not read that image"
+            }
+        }
+    }
+
+    private val pickAvatar =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri ?: return@registerForActivityResult
+            storeAvatar(uri, avatarChatKey, avatarTarget)
+        }
+
+    private fun displayName(uri: Uri): String? =
+        runCatching {
+            contentResolver
+                .query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { if (it.moveToFirst()) it.getString(0) else null }
+        }.getOrNull()
+
+    /**
+     * Identifies a picked item well enough to reject an accidental re-import of the same
+     * file. Name alone is not enough (two exports can share a name); size and modified
+     * time together make a collision vanishingly unlikely.
+     */
+    private fun fingerprint(uri: Uri): String {
+        val name = displayName(uri) ?: uri.lastPathSegment.orEmpty()
+        var size = 0L
+        var modified = 0L
+        runCatching {
+            contentResolver.query(uri, null, null, null, null)?.use { c ->
+                if (!c.moveToFirst()) return@use
+                val i = c.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                if (i >= 0 && !c.isNull(i)) size = c.getLong(i)
+                val m = c.getColumnIndex(
+                    android.provider.DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+                )
+                if (m >= 0 && !c.isNull(m)) modified = c.getLong(m)
+            }
+        }
+        return "$name|$size|$modified"
+    }
+
+    /** What an import attempt produced. */
+    private sealed interface ImportOutcome {
+        data class Indexed(val index: ArchiveIndex, val roots: List<String>) : ImportOutcome
+        data class Nothing(val pickedCount: Int) : ImportOutcome
+    }
+
     private fun runImport(onDone: (Boolean) -> Unit) {
-        val uri = pendingUri ?: run { onDone(false); return }
+        val uri = pendingUri ?: run {
+            // Nothing was actually picked (or the picker was cancelled).
+            importStatus.value = "Nothing was selected."
+            onDone(false)
+            return
+        }
         val isFolder = pendingIsFolder
         importStatus.value = null
         importProgress.value = null
         lifecycleScope.launch {
             runCatching {
-                val path = withContext(Dispatchers.IO) {
-                    if (isFolder) {
-                        // Read a local folder in place only when we actually hold
-                        // broad storage access; otherwise copy via SAF.
-                        val direct = if (hasAllFilesAccess()) picker.directPath(uri) else null
-                        if (direct != null) direct.absolutePath
-                        else picker.copyToAppStorage(uri, true, "export") { importProgress.value = it }
-                    } else {
-                        picker.extractZip(uri, picker.exportDir()) { importProgress.value = it }
+                // Fingerprint everything picked this time, then keep only the new items.
+                val picked = withContext(Dispatchers.IO) {
+                    val folders = pendingFolders.map { Triple(fingerprint(it), it, true) }
+                    val zips = pendingUris.map { Triple(fingerprint(it), it, false) }
+                    val all = folders + zips
+                    val seen = prefs.importedFingerprints.toMutableSet()
+                    all.filter { seen.add(it.first) } to all.size
+                }
+                val (fresh, pickedCount) = picked
+                if (fresh.isEmpty()) {
+                    // Every item was already imported. Do nothing at all and leave the
+                    // existing archive exactly as it is.
+                    return@runCatching ImportOutcome.Nothing(pickedCount)
+                }
+
+                val newPaths = withContext(Dispatchers.IO) {
+                    fresh.mapIndexed { i, (_, u, folder) ->
+                        val slug = (displayName(u) ?: "item$i")
+                            .replace(Regex("[^A-Za-z0-9._-]+"), "_")
+                            .take(48).ifBlank { "item$i" }
+                        if (folder) {
+                            // Read in place only with all-files access; otherwise copy.
+                            val direct = if (hasAllFilesAccess()) picker.directPath(u) else null
+                            direct?.absolutePath
+                                ?: picker.copyToAppStorage(u, true, "import-$slug") { importProgress.value = it }
+                        } else {
+                            val dest = picker.exportDir().resolve("import-$slug").also { it.mkdirs() }
+                            picker.extractZip(u, dest) { importProgress.value = it }
+                            dest.absolutePath
+                        }
                     }
                 }
+
+                // ADD to what is already imported; never replace it.
+                val allRoots = (prefs.importedRoots + newPaths).distinct()
+                prefs.importedRoots = allRoots
+                prefs.importedFingerprints = (fresh.map { it.first } + prefs.importedFingerprints).distinct()
+
+                val roots = allRoots.map { File(it) }
                 withContext(Dispatchers.IO) {
-                    val idx = ArchiveIndex.index(File(path)) { done, total ->
+                    val idx = ArchiveIndex.indexAll(roots, prefs.mediaRoots) { done, total ->
                         importProgress.value = ImportProgress(
                             phase = ImportProgress.Phase.INDEXING,
                             fraction = if (total > 0) done.toFloat() / total else null,
@@ -138,9 +358,23 @@ class MainActivity : ComponentActivity() {
                     if (idx.threads.isNotEmpty()) {
                         runCatching { idx.saveSnapshot(snapshotFile) }
                     }
-                    idx
-                } to path
-            }.onSuccess { (index, path) ->
+                    ImportOutcome.Indexed(idx, allRoots)
+                }
+            }.onSuccess { outcome ->
+                when (outcome) {
+                    is ImportOutcome.Nothing -> {
+                        importStatus.value = if (outcome.pickedCount == 1) {
+                            "Already imported — nothing to do."
+                        } else {
+                            "All ${outcome.pickedCount} items were already imported — nothing to do."
+                        }
+                        onDone(false)
+                        return@onSuccess
+                    }
+                    is ImportOutcome.Indexed -> Unit
+                }
+                val index = outcome.index
+                val path = outcome.roots
                 indexState.value = index
                 val skipped = index.skippedFiles + index.parseFailures
                 if (index.threads.isEmpty()) {
@@ -151,7 +385,7 @@ class MainActivity : ComponentActivity() {
                         append("No chats found")
                         if (skipped > 0) append(" — $skipped message files skipped")
                         if (reasons.isNotEmpty()) append(" ($reasons)")
-                        append(". Expected <export>/your_instagram_activity/messages/inbox/<thread>/message_1.json.")
+                        append(". Expected your_instagram_activity/messages/inbox/<thread>/message_1.json inside it.")
                     }
                     onDone(false)
                     return@onSuccess
@@ -159,10 +393,11 @@ class MainActivity : ComponentActivity() {
                 val msg = buildString {
                     append("Imported ${index.threads.size} chats")
                     if (skipped > 0) append(" · $skipped files skipped")
+                    if (path.size > 1) append(" · ${path.size} exports")
                 }
                 Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
                 // Remember where the archive lives so the next launch reopens it.
-                prefs.savedExportPath = path
+                prefs.savedExportPaths = path
                 onDone(true)
             }.onFailure { e ->
                 importStatus.value = "Import failed: ${e.message}"
@@ -187,31 +422,63 @@ class MainActivity : ComponentActivity() {
             runCatching { ArchiveIndex.loadSnapshot(snapshot) }
                 .getOrNull()
                 ?.takeIf { it.threads.isNotEmpty() }
-                ?.let { indexState.value = it }
+                ?.let {
+                    indexState.value = it
+                }
         }
 
         val settings = AppSettings(prefs)
         setContent {
-            IGArchiveTheme(variant = settings.theme) {
-                val base = LocalDensity.current
-                CompositionLocalProvider(
-                    LocalCompactRows provides settings.compactRows,
-                    LocalAnimations provides settings.animations,
-                    LocalDensity provides Density(base.density, base.fontScale * settings.textScale),
-                ) {
-                    AppRoot(
-                        indexState = indexState,
-                        importStatus = importStatus,
-                        importProgress = importProgress,
-                        prefs = prefs,
-                        settings = settings,
-                        launchZipPicker = { cb -> onRenamed = cb; pickZip.launch(arrayOf("application/zip")) },
-                        launchDirPicker = { cb -> onRenamed = cb; pickDir.launch(null) },
-                        runImport = ::runImport,
-                        onGrantAccess = ::requestAllFilesAccess,
-                        hasAllFilesAccess = ::hasAllFilesAccess,
-                        onDeleteIndex = ::deleteIndex,
-                    )
+            // Each motion effect is independently toggleable, but all are gated by the
+            // master "Animations" switch, so turning it off still stops everything.
+            val master = MOTION_ENABLED && settings.animations
+            val motion = Motion(
+                screen = master && settings.animScreen,
+                themeFade = master && settings.animThemeFade,
+                press = master && settings.animPress,
+                listRise = master && settings.animListRise,
+                cascade = master && settings.animCascade,
+                dateTick = master && settings.animDateTick,
+                flare = master && settings.animFlare,
+                jump = master && settings.animJump,
+            )
+            CompositionLocalProvider(
+                LocalAnimations provides master,
+                LocalMotion provides motion,
+            ) {
+                IGArchiveTheme(variant = settings.theme, crossfade = motion.themeFade) {
+                    val base = LocalDensity.current
+                    CompositionLocalProvider(
+                        LocalCompactRows provides settings.compactRows,
+                        LocalDensity provides Density(base.density, base.fontScale * settings.textScale),
+                    ) {
+                        AppRoot(
+                            indexState = indexState,
+                            importStatus = importStatus,
+                            importProgress = importProgress,
+                            prefs = prefs,
+                            settings = settings,
+                            launchZipPicker = { cb -> onRenamed = cb; pickZip.launch(arrayOf("application/zip")) },
+                            launchDirPicker = { cb -> onRenamed = cb; pickDir.launch(null) },
+                            runImport = ::runImport,
+                            onGrantAccess = ::requestAllFilesAccess,
+                            hasAllFilesAccess = ::hasAllFilesAccess,
+                            onDeleteIndex = ::deleteIndex,
+                            askDownloadFolder = { askDownloadFolder() },
+                            mediaRoots = prefs.mediaRoots.map { it.absolutePath },
+                            askMediaFolder = { pickMediaFolder.launch(null) },
+                            removeMediaFolder = { p ->
+                                prefs.mediaRoots = prefs.mediaRoots.filterNot { it.absolutePath == p }
+                                rebuildIndex()
+                            },
+                            pickAvatarLauncher = { chatKey, target ->
+                                avatarChatKey = chatKey
+                                avatarTarget = target
+                                pickAvatar.launch(arrayOf("image/*"))
+                            },
+                            avatarVersion = avatarVersion,
+                        )
+                    }
                 }
             }
         }
@@ -246,7 +513,12 @@ class MainActivity : ComponentActivity() {
 
     private fun deleteIndex() {
         indexState.value = null
+        prefs.savedExportPaths = emptyList()
         prefs.savedExportPath = null
+        // Forget which files were imported, otherwise re-importing the same ones would
+        // be rejected as duplicates after the data was deleted.
+        prefs.importedRoots = emptyList()
+        prefs.importedFingerprints = emptyList()
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {
                 File(filesDir, "imports").deleteRecursively()
@@ -273,15 +545,26 @@ private fun AppRoot(
     onGrantAccess: () -> Unit,
     hasAllFilesAccess: () -> Boolean,
     onDeleteIndex: () -> Unit,
+    askDownloadFolder: () -> Unit,
+    mediaRoots: List<String>,
+    askMediaFolder: () -> Unit,
+    removeMediaFolder: (String) -> Unit,
+    pickAvatarLauncher: (String?, String?) -> Unit,
+    avatarVersion: Int,
 ) {
     val nav = remember { NavState(if (indexState.value != null) Screen.LIST else Screen.IMPORT) }
+    // Bumped whenever a note is written or deleted, so the Notes tab re-reads the store.
+    var notesVersion by remember { mutableIntStateOf(0) }
+    // Bumped when a contact is renamed, so lists and open chats re-map their names.
+    var renamesVersion by remember { mutableIntStateOf(0) }
     val index = indexState.value
-    val chats = remember(index) { index?.let { UiMapping.chatItems(it) } ?: emptyList() }
+    // Renames and photos are per chat, so the mapper is handed lookups rather than a map.
     val context = LocalContext.current
     val sfx = remember { Sfx(context) }
     DisposableEffect(sfx) { onDispose { sfx.release() } }
     SideEffect { sfx.enabled = settings.sfxEnabled }
     val animations = LocalAnimations.current
+    val motion = LocalMotion.current
 
     var lightboxVisible by remember { mutableStateOf(false) }
     var pickedName by remember { mutableStateOf<String?>(null) }
@@ -313,17 +596,91 @@ private fun AppRoot(
 
     val chatSelf = effectiveMe(selectedKey)
 
+    // Keyed on the avatar version too: setting a photo used to leave the list stale,
+    // which is why the chat list kept showing an initial after a photo was chosen.
+    val chats = remember(index, renamesVersion, avatarVersion) {
+        index?.let {
+            UiMapping.chatItems(
+                it,
+                renameOf = { chatKey, name -> prefs.renamed(chatKey, name) ?: name },
+                // Excludes you outright: a DM row must show the other person's photo, so
+                // there is deliberately no "anybody with a photo" fallback here.
+                avatarOf = { chatKey, name ->
+                    val me = perThreadMe[chatKey] ?: prefs.threadMe(chatKey) ?: selfGlobal
+                    val detected = index.quickSelf(chatKey)
+                    val you = if (me == detected || index.thread(chatKey)?.participants?.contains(me) == true) {
+                        me
+                    } else {
+                        detected
+                    }
+                    if (name == you) null else prefs.contactAvatar(chatKey, name)
+                },
+                selfOf = { chatKey ->
+                    // quickSelf, NOT detectMe: detectMe deserialises the whole thread.
+                    val detected = index.quickSelf(chatKey)
+                    val chosen = perThreadMe[chatKey] ?: prefs.threadMe(chatKey) ?: selfGlobal
+                    when {
+                        chosen == null -> detected
+                        chosen == detected -> chosen
+                        index.thread(chatKey)?.participants?.contains(chosen) == true -> chosen
+                        else -> detected?.takeIf { it.isNotBlank() } ?: chosen
+                    }
+                },
+            )
+        } ?: emptyList()
+    }
+
+
     // System/gesture back mirrors the in-app back arrow. When there is nowhere to go
     // (import screen, or the chat list root) the handler stays disabled, so the system
     // default of finishing the activity applies.
     BackHandler(enabled = nav.canGoBack) { nav.back() }
 
-    LaunchedEffect(index, selectedKey, chatSelf) {
+    // Deliberately NOT keyed on renamesVersion: a rename changes display strings only, and
+    // rebuilding every message for it made a rename re-render the whole chat.
+    LaunchedEffect(index, selectedKey, chatSelf, avatarVersion) {
         val key = selectedKey
-        chatMessages = if (index != null && key != null) {
-            withContext(Dispatchers.Default) { UiMapping.messageItems(index, key, chatSelf) }
+        val idx = index
+        if (idx != null && key != null) {
+            val renameOf: (String, String) -> String = { c, n -> prefs.renamed(c, n) ?: n }
+            val avatarOf: (String, String) -> String? = { c, n -> prefs.contactAvatar(c, n) }
+            val msgs = withContext(Dispatchers.IO) { idx.messages(key) }
+
+            // Progressive: map the first slice, publish it so the screen is usable and the
+            // header actions live, then keep going. Media resolution dominates this cost, so
+            // doing it a slice at a time is what actually makes the chat open feel instant.
+            val total = msgs.size
+            if (total <= FIRST_CHUNK) {
+                chatMessages = withContext(Dispatchers.Default) {
+                    UiMapping.messageItems(idx, key, chatSelf, renameOf, avatarOf, source = msgs)
+                }
+                return@LaunchedEffect
+            }
+            val acc = ArrayList<MessageItem>(total)
+            var day = ""
+            var from = 0
+            while (from < total) {
+                val count = if (from == 0) FIRST_CHUNK else CHUNK
+                val (items, after) = withContext(Dispatchers.Default) {
+                    UiMapping.messageChunk(idx, key, msgs, from, count, chatSelf, renameOf, avatarOf, day)
+                }
+                acc.addAll(items)
+                day = after
+                from += count
+                if (from <= FIRST_CHUNK) {
+                    // Publish exactly once, so the chat becomes usable immediately...
+                    chatMessages = ArrayList(acc)
+                    yield()
+                }
+            }
+            // ...then swap in the complete conversation. Deliberately a SINGLE further
+            // assignment: reassigning repeatedly made the screen re-run its per-chat
+            // effects on every publish, which read as the chat reloading over and over.
+            if (acc.size == total) {
+                chatMessages = ArrayList(acc)
+            }
         } else {
-            emptyList()
+            chatMessages = emptyList()
         }
     }
 
@@ -332,6 +689,37 @@ private fun AppRoot(
     fun maybeAskGlobal() {
         val idx = indexState.value ?: return
         if (selfGlobal == null && idx.allParticipantNames().size >= 2) globalChooser = true
+    }
+
+    /**
+     * Runs the import for whatever was just picked and, on success, goes to the chat list.
+     * Used by the Settings import buttons so they behave exactly like the home screen.
+     */
+    fun pickAndIndex() {
+        indexing = true
+        runImport { ok ->
+            indexing = false
+            if (ok) {
+                nav.resetTo(Screen.LIST)
+                maybeAskGlobal()
+            }
+        }
+    }
+
+    // Set when Settings started an import, so the Import screen kicks it off on arrival.
+    var autoImport by remember { mutableStateOf(false) }
+
+    /**
+     * Settings has no progress bar or status banner of its own, so an import started from
+     * there used to run invisibly. It now hands off to the Import screen, which shows both,
+     * and starts itself once that screen is up.
+     */
+    fun importFromSettings(launch: (((String) -> Unit)) -> Unit) {
+        launch { name ->
+            pickedName = name
+            autoImport = true
+            nav.navigate(Screen.IMPORT)
+        }
     }
 
     // Reopen the last imported archive on launch instead of starting over. The indexed
@@ -345,19 +733,24 @@ private fun AppRoot(
         // list; just offer the perspective chooser and skip the splash entirely.
         if (indexState.value == null) {
             val snapshot = File(context.filesDir, "imports/index.snapshot")
-            val savedPath = prefs.savedExportPath
-            if (snapshot.exists() || savedPath != null) {
+            val savedRoots = prefs.importedRoots.ifEmpty { prefs.savedExportPaths }
+            if (snapshot.exists() || savedRoots.isNotEmpty()) {
                 restoring = true
                 val restored = withContext(Dispatchers.IO) {
                     // Fast path: reopen the saved index without reparsing the export.
                     // Only if that is missing or unusable do we rebuild from the saved
                     // folder, then write a fresh snapshot for next time.
+                    val t0 = android.os.SystemClock.elapsedRealtime()
                     val fromSnapshot = ArchiveIndex.loadSnapshot(snapshot)
                     if (fromSnapshot != null && fromSnapshot.threads.isNotEmpty()) {
                         fromSnapshot
-                    } else if (savedPath != null) {
-                        val rebuilt = runCatching { ArchiveIndex.index(File(savedPath)) }.getOrNull()
+                    } else if (savedRoots.isNotEmpty()) {
+                        // Reopen every root the import covered, not just the first.
+                        val rebuilt = runCatching {
+                            ArchiveIndex.indexAll(savedRoots.map { File(it) }, prefs.mediaRoots)
+                        }.getOrNull()
                         if (rebuilt != null && rebuilt.threads.isNotEmpty()) {
+                            val ts = android.os.SystemClock.elapsedRealtime()
                             runCatching { rebuilt.saveSnapshot(snapshot) }
                             rebuilt
                         } else {
@@ -372,8 +765,16 @@ private fun AppRoot(
                     importStatus.value = null
                     indexState.value = restored
                     nav.resetTo(Screen.LIST)
+                    // Backfill head snapshots for archives imported by an older build, so
+                    // the fast chat-open path works without asking anyone to re-import.
+                    withContext(Dispatchers.IO) {
+                        runCatching { restored.backfillHeads(restored.threads) }
+                    }
+                    nav.resetTo(Screen.LIST)
                 } else {
+                    prefs.savedExportPaths = emptyList()
                     prefs.savedExportPath = null
+                    prefs.importedRoots = emptyList()
                     runCatching { snapshot.delete() }
                     importStatus.value = "Couldn't reopen your last import — please import it again."
                 }
@@ -388,33 +789,83 @@ private fun AppRoot(
             .background(com.igviewer.archive.ui.theme.Tokens.Bg)
             .statusBarsPadding(),
     ) {
+        // Import progress as a hairline rail along the very top edge, with the phase
+        // caption beside it. It sits over the content rather than pushing it around, so
+        // scrolling and reading a chat are unaffected while a big import runs.
+        importProgress.value?.let { p ->
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .background(Tokens.Bg.copy(alpha = 0.94f))
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val f = p.fraction
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(Tokens.Line),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(f ?: 0.02f)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(Tokens.Accent),
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = buildString {
+                        append(
+                            when (p.phase) {
+                                ImportProgress.Phase.COPYING -> "Copying"
+                                ImportProgress.Phase.EXTRACTING -> "Extracting"
+                                ImportProgress.Phase.INDEXING -> "Indexing"
+                                else -> "Working"
+                            },
+                        )
+                        if (p.totalItems > 0) append(" ${p.doneItems}/${p.totalItems} chats")
+                        if (p.totalBytes > 0) {
+                            append(" ${formatBytes(p.doneBytes)}/${formatBytes(p.totalBytes)}")
+                        }
+                    },
+                    color = Tokens.Muted,
+                    fontSize = 11.sp,
+                )
+            }
+        }
+
         AnimatedContent(
             targetState = nav.current,
-            transitionSpec = {
-                val d = if (animations) 180 else 0
-                (fadeIn(tween(d)) + slideInHorizontally { it / 14 }) togetherWith fadeOut(tween(if (animations) 120 else 0))
-            },
+            transitionSpec = veil(motion.screen),
             label = "screen",
         ) { screen ->
             when (screen) {
-            Screen.IMPORT -> ImportScreen(
+            Screen.IMPORT -> {
+                // Settings hands off here; start the import as soon as we are on screen,
+                // so the progress bar and status banner below are actually visible.
+                LaunchedEffect(screen) {
+                    if (autoImport && pickedName != null && !indexing) {
+                        autoImport = false
+                        pickAndIndex()
+                    }
+                }
+                ImportScreen(
                 pickedName = pickedName,
                 indexing = indexing,
                 progress = importProgress.value,
                 status = importStatus.value,
                 onPickZip = { launchZipPicker { name -> pickedName = name } },
                 onPickDir = { launchDirPicker { name -> pickedName = name } },
-                onIndex = {
-                    indexing = true
-                    runImport { ok ->
-                        indexing = false
-                        if (ok) {
-                            nav.resetTo(Screen.LIST)
-                            maybeAskGlobal()
-                        }
-                    }
-                },
-            )
+                onIndex = { pickAndIndex() },
+                downloadFolderName = prefs.downloadTreeName,
+                onChooseDownloadFolder = { askDownloadFolder() },
+                )
+            }
             Screen.LIST -> ChatListScreen(
                 chats = chats,
                 onChatClick = { key ->
@@ -429,7 +880,8 @@ private fun AppRoot(
             Screen.CHAT -> {
                 val key = selectedKey
                 ChatScreen(
-                    chatName = key?.let { index?.thread(it)?.title?.ifBlank { it } } ?: "",
+                    // Same title the chat list shows: renamed, and without you in it.
+                    chatName = key?.let { k -> chats.firstOrNull { it.key == k }?.name } ?: "",
                     messages = chatMessages,
                     onBack = { sfx.tap(); nav.back() },
                     scrollToIndex = targetMsgIndex,
@@ -437,24 +889,71 @@ private fun AppRoot(
                     onChooseSelf = { sfx.tap(); key?.let { threadChooserKey = it } },
                     autoplayVideos = settings.autoplayVideos,
                     chatKey = key.orEmpty(),
+                    archiveKey = index?.root?.name.orEmpty(),
+                    onNeedDownloadFolder = askDownloadFolder,
+                    onRenamed = { renamesVersion++ },
+                    onChooseSelfFor = { raw ->
+                        val chatKey = key ?: return@ChatScreen
+                        perThreadMe[chatKey] = raw
+                        prefs.setThreadMe(chatKey, raw)
+                    },
+                    avatarVersion = avatarVersion,
+                    onPickAvatar = pickAvatarLauncher,
                 )
             }
-            Screen.SEARCH -> SearchScreen(
-                search = { q -> index?.let { UiMapping.search(it, q) } ?: emptyList() },
-                onBack = { sfx.tap(); nav.back() },
-                onResultClick = { key, msgIndex ->
-                    sfx.tap()
-                    selectedKey = key
-                    targetMsgIndex = msgIndex
-                    nav.navigate(Screen.CHAT)
-                },
-            )
+            Screen.SEARCH -> {
+                val noteResults = remember(index, notesVersion) {
+                    val dateFmt = java.text.SimpleDateFormat("EEE d MMM yyyy", java.util.Locale.getDefault())
+                    val timeFmt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                    val archiveKey = index?.root?.name.orEmpty()
+                    val byThread = NoteStore.all(prefs)
+                        .filter { it.archiveKey == archiveKey }
+                    byThread.mapNotNull { n ->
+                        val msgs = index?.messages(n.threadKey).orEmpty()
+                        val msg = msgs.getOrNull(n.msgIndex) ?: return@mapNotNull null
+                        val chatName = index?.thread(n.threadKey)?.title?.ifBlank { n.threadKey }.orEmpty()
+                        NoteResult(
+                            note = n,
+                            chatName = chatName,
+                            date = dateFmt.format(java.util.Date(msg.tsMs)),
+                            time = timeFmt.format(java.util.Date(msg.tsMs)),
+                        )
+                    }
+                }
+                SearchScreen(
+                    search = { q -> index?.let { UiMapping.search(it, q) } ?: emptyList() },
+                    onBack = { sfx.tap(); nav.back() },
+                    onResultClick = { key, msgIndex ->
+                        sfx.tap()
+                        selectedKey = key
+                        targetMsgIndex = msgIndex
+                        nav.navigate(Screen.CHAT)
+                    },
+                    notes = noteResults,
+                    notesVersion = notesVersion,
+                    onNoteClick = { nr ->
+                        sfx.tap()
+                        selectedKey = nr.note.threadKey
+                        targetMsgIndex = nr.note.msgIndex
+                        nav.navigate(Screen.CHAT)
+                    },
+                    onNoteDelete = { nr ->
+                        NoteStore.delete(prefs, nr.note.archiveKey, nr.note.threadKey, nr.note.msgIndex)
+                        notesVersion++
+                    },
+                )
+            }
+            // These run the same import the home screen does, then land on the chat list.
+            // Previously they only stashed the picked name, which the Settings screen has
+            // nowhere to show, so tapping them looked like a dead button.
             Screen.SETTINGS -> SettingsScreen(
                 onBack = { sfx.tap(); nav.back() },
-                onPickZip = { launchZipPicker { name -> pickedName = name } },
-                onPickDir = { launchDirPicker { name -> pickedName = name } },
+                onPickZip = { importFromSettings { cb -> launchZipPicker(cb) } },
+                onPickDir = { importFromSettings { cb -> launchDirPicker(cb) } },
                 onDeleteIndex = {
                     selectedKey = null
+                    index?.root?.name?.let { NoteStore.forgetArchive(prefs, it) }
+                    notesVersion++
                     onDeleteIndex()
                     nav.resetTo(Screen.IMPORT)
                 },
@@ -462,6 +961,11 @@ private fun AppRoot(
                 meName = selfGlobal,
                 onChooseMe = { globalChooser = true },
                 settings = settings,
+                downloadFolderName = prefs.downloadTreeName,
+                onChooseDownloadFolder = { sfx.tap(); askDownloadFolder() },
+                mediaRoots = prefs.mediaRoots.map { it.absolutePath },
+                onAddMediaFolder = { askMediaFolder() },
+                onRemoveMediaFolder = removeMediaFolder,
             )
             }
         }
@@ -515,8 +1019,8 @@ private fun AppRoot(
                 text = {
                     Text(
                         "All-files access is not required, but granting it lets the app read " +
-                            "your export in place and import faster, without copying files. " +
-                            "You can change this anytime in Settings.",
+                            "your Instagram data in place and import faster, without copying " +
+                            "files. You can change this anytime in Settings.",
                     )
                 },
                 confirmButton = {

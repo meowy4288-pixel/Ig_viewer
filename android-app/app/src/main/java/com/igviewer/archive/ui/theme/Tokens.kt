@@ -1,5 +1,7 @@
 package com.igviewer.archive.ui.theme
 
+import androidx.compose.ui.unit.dp
+
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -51,10 +53,91 @@ val PorcelainPalette = Palette(
     muted = Color(0xFF666666),
 )
 
+// The reference set (Rouge Noir / Blue Coral / Cognac / White Sand / Anthracite).
+// Each is a single fixed palette (its own `isDark`), not a dark/light pair. Rule
+// from the reference: one hero colour owns bg/surface/accent, warm brass (cognac)
+// is the gilt, and hero colours too dark to read as a bubble are lifted a few
+// percent. Midnight/Porcelain stay first and remain the default.
+
+/** Rouge Noir: wine-black room, wine bubbles, cognac-gold titles. */
+val RougeNoirPalette = Palette(
+    isDark = true,
+    bg = Color(0xFF0F0608),
+    surface = Color(0xFF1D0B10),
+    line = Color(0xFF3B1A22),
+    accent = Color(0xFF7A1424),
+    onAccent = Color(0xFFF4ECE6),
+    accentDim = Color(0xFF3A121A),
+    gilt = Color(0xFFC98A54),
+    text = Color(0xFFE7E3DD),
+    muted = Color(0xFF9A8884),
+)
+
+/** Blue Coral: deep sea-teal, sand text, warm cognac accents as contrast. */
+val BlueCoralPalette = Palette(
+    isDark = true,
+    bg = Color(0xFF051312),
+    surface = Color(0xFF0C2423),
+    line = Color(0xFF1F4443),
+    accent = Color(0xFF0F5A58),
+    onAccent = Color(0xFFE7E3DD),
+    accentDim = Color(0xFF0E3332),
+    gilt = Color(0xFFD08A55),
+    text = Color(0xFFE7E3DD),
+    muted = Color(0xFF86A09E),
+)
+
+/** Cognac: warm leather-brown dark, exact cognac bubbles, champagne titles. */
+val CognacPalette = Palette(
+    isDark = true,
+    bg = Color(0xFF120C08),
+    surface = Color(0xFF211610),
+    line = Color(0xFF3D2A1E),
+    accent = Color(0xFF8A4E2A),
+    onAccent = Color(0xFFF6EDE4),
+    accentDim = Color(0xFF3A2314),
+    gilt = Color(0xFFD8C39A),
+    text = Color(0xFFE7E3DD),
+    muted = Color(0xFF9C8B7C),
+)
+
+/** White Sand: the light theme. Sand paper, anthracite ink, cognac titles. */
+val WhiteSandPalette = Palette(
+    isDark = false,
+    bg = Color(0xFFE7E3DD),
+    surface = Color(0xFFF5F2EE),
+    line = Color(0xFFCFC9C0),
+    accent = Color(0xFF1B1B1F),
+    onAccent = Color(0xFFE7E3DD),
+    accentDim = Color(0xFFD9CFC2),
+    gilt = Color(0xFF8A4E2A),
+    text = Color(0xFF1B1B1F),
+    muted = Color(0xFF7A746C),
+)
+
+/** Anthracite: neutral charcoal, sand bubbles, one cognac spark. Closest to Midnight. */
+val AnthracitePalette = Palette(
+    isDark = true,
+    bg = Color(0xFF0E0E10),
+    surface = Color(0xFF1B1B1F),
+    line = Color(0xFF2E2E34),
+    accent = Color(0xFFE7E3DD),
+    onAccent = Color(0xFF1B1B1F),
+    accentDim = Color(0xFF2A2A30),
+    gilt = Color(0xFFC27A47),
+    text = Color(0xFFE7E3DD),
+    muted = Color(0xFF8B8B92),
+)
+
 /** A selectable theme. `id` is persisted; add more variants here later. */
 enum class ThemeVariant(val id: String, val label: String, val palette: Palette) {
     MIDNIGHT("midnight", "Midnight", MidnightPalette),
     PORCELAIN("porcelain", "Porcelain", PorcelainPalette),
+    ROUGE_NOIR("rouge_noir", "Rouge Noir", RougeNoirPalette),
+    BLUE_CORAL("blue_coral", "Blue Coral", BlueCoralPalette),
+    COGNAC("cognac", "Cognac", CognacPalette),
+    WHITE_SAND("white_sand", "White Sand", WhiteSandPalette),
+    ANTHRACITE("anthracite", "Anthracite", AnthracitePalette),
     ;
 
     companion object {
@@ -80,8 +163,10 @@ object Tokens {
 
     val Serif = FontFamily.Serif
 
-    fun apply(variant: ThemeVariant) {
-        val p = variant.palette
+    fun apply(variant: ThemeVariant) = apply(variant.palette)
+
+    /** Publish a raw palette; used for the crossfading palette during a theme switch. */
+    fun apply(p: Palette) {
         Bg = p.bg
         Surface = p.surface
         Line = p.line
@@ -93,3 +178,9 @@ object Tokens {
         Muted = p.muted
     }
 }
+
+/**
+ * One horizontal inset for every screen's content, so screens stop each picking their own.
+ * Headers and rows both derive from this.
+ */
+val ScreenPadding = 16.dp

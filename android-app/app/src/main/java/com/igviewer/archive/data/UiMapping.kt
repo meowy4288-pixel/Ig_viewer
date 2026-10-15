@@ -10,23 +10,108 @@ import java.util.Locale
 /** Maps the canonical archive model onto the Compose screens' view models. */
 object UiMapping {
 
-    fun chatItems(index: ArchiveIndex): List<ChatItem> = index.threads.map { t ->
+    fun chatItems(
+        index: ArchiveIndex,
+        renameOf: (String, String) -> String = { _, n -> n },
+        avatarOf: (String, String) -> String? = { _, _ -> null },
+        /** Who "you" are in a given chat, so the title can leave you out of it. */
+        selfOf: (String) -> String? = { null },
+    ): List<ChatItem> =
+        index.threads.map { t ->
+        // Renames are applied to the raw participant list first, so a renamed person wins
+        // over the export's own title ordering. Both lookups are per chat.
+        // "You" is dropped from the title: a DM should be called by the other person, not
+        // "you and them".
+        val me = selfOf(t.key)
+        val shown = t.participants
+            .filter { it != me }
+            .map { renameOf(t.key, it) }
+            .filter { it.isNotBlank() }
+        val title = when {
+            shown.isEmpty() -> t.title.ifBlank { t.key }
+            shown.size == 1 -> shown.first()
+            else -> shown.joinToString(", ")
+        }
         ChatItem(
             key = t.key,
-            name = t.title.ifBlank { t.key },
+            name = title.ifBlank { t.key },
+            // Only ever the other person's photo: a DM row must not show your own.
+            avatarPath = t.participants.filter { it != me }.firstNotNullOfOrNull { avatarOf(t.key, it) },
             lastMessage = t.lastPreview,
             date = if (t.lastTsMs > 0) chatDate(t.lastTsMs) else "",
         )
     }
 
-    fun messageItems(index: ArchiveIndex, key: String, selfName: String? = null): List<MessageItem> {
-        val me = selfName?.takeIf { it.isNotBlank() } ?: index.detectMe(key)
-        val msgs = index.messages(key)
+    /**
+     * Maps a slice of a thread, resumably.
+     *
+     * Returns the items for `[from, from + count)` plus the day string to pass as
+     * [fromDay] on the next call, so day separators stay correct across chunk boundaries.
+     * This is what lets a chat render its first screen before the whole conversation has
+     * been mapped -- and mapped media, which is the expensive part.
+     */
+    fun messageChunk(
+        index: ArchiveIndex,
+        key: String,
+        msgs: List<KeptMessage>,
+        from: Int,
+        count: Int,
+        selfName: String? = null,
+        renameOf: (String, String) -> String = { _, n -> n },
+        avatarOf: (String, String) -> String? = { _, _ -> null },
+        fromDay: String = "",
+    ): Pair<List<MessageItem>, String> {
+        val out = ArrayList<MessageItem>(count)
+        var day = fromDay
+        mapRange(index, key, msgs, from, count, selfName, renameOf, avatarOf, fromDay) { item, after ->
+            out.add(item)
+            day = after
+        }
+        return out to day
+    }
+
+    fun messageItems(
+        index: ArchiveIndex,
+        key: String,
+        selfName: String? = null,
+        renameOf: (String, String) -> String = { _, n -> n },
+        avatarOf: (String, String) -> String? = { _, _ -> null },
+        /** Read a specific slice instead of the whole thread, for progressive rendering. */
+        source: List<KeptMessage>? = null,
+    ): List<MessageItem> {
+        val msgs = source ?: index.messages(key)
+        val out = ArrayList<MessageItem>(msgs.size)
+        mapRange(index, key, msgs, 0, msgs.size, selfName, renameOf, avatarOf, "") { item, _ ->
+            out.add(item)
+        }
+        return out
+    }
+
+    /**
+     * The per-message mapping, shared by the whole-thread and chunked entry points.
+     *
+     * [emit] receives each built item and the running day string.
+     */
+    private fun mapRange(
+        index: ArchiveIndex,
+        key: String,
+        msgs: List<KeptMessage>,
+        from: Int,
+        count: Int,
+        selfName: String?,
+        renameOf: (String, String) -> String,
+        avatarOf: (String, String) -> String?,
+        startDay: String,
+        emit: (MessageItem, String) -> Unit,
+    ) {
+        val me = selfName?.takeIf { it.isNotBlank() } ?: index.quickSelf(key)
         val dayFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val dayLabelFmt = SimpleDateFormat("EEEE, d MMMM yyyy", Locale.getDefault())
         val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
-        var lastDay = ""
-        return msgs.map { m ->
+        var lastDay = startDay
+        val end = minOf(msgs.size, from + count)
+        for (i in from until end) {
+            val m = msgs[i]
             val day = dayFmt.format(Date(m.tsMs))
             val sep = if (day != lastDay) {
                 lastDay = day
@@ -44,7 +129,7 @@ object UiMapping {
                     labels.add(labelFor(ref.kind))
                     continue
                 }
-                val file = index.mediaFile(ref.uri)
+                val file = index.mediaFile(ref.uri, key)
                 if (file == null) {
                     labels.add(labelFor(ref.kind))
                     continue
@@ -62,22 +147,28 @@ object UiMapping {
                     else -> labels.add(labelFor(ref.kind))
                 }
             }
-            MessageItem(
-                sender = m.sender,
-                text = m.content ?: "",
-                time = timeFmt.format(Date(m.tsMs)),
-                isMe = me.isNotEmpty() && m.sender == me,
-                tsMs = m.tsMs,
-                isUnsent = m.isUnsent,
-                callDurationMs = m.callDuration,
-                imageFiles = images,
-                audioFiles = audios,
-                videoFiles = videos,
-                attachmentLabels = labels.toList(),
-                shareLink = m.share?.first?.takeIf { it.isNotBlank() },
-                shareText = m.share?.second?.takeIf { it.isNotBlank() },
-                reactions = m.reactions.map { it.second },
-                daySeparator = sep,
+            emit(
+                MessageItem(
+                    sender = renameOf(key, m.sender),
+                    text = m.content ?: "",
+                    time = timeFmt.format(Date(m.tsMs)),
+                    isMe = !me.isNullOrEmpty() && m.sender == me,
+                    tsMs = m.tsMs,
+                    isUnsent = m.isUnsent,
+                    callDurationMs = m.callDuration,
+                    imageFiles = images,
+                    audioFiles = audios,
+                    videoFiles = videos,
+                    attachmentLabels = labels.toList(),
+                    shareLink = m.share?.first?.takeIf { it.isNotBlank() },
+                    shareText = m.share?.second?.takeIf { it.isNotBlank() },
+                    reactions = m.reactions.map { it.second },
+                    daySeparator = sep,
+                    msgIndex = i,
+                    rawSender = m.sender,
+                    avatarPath = avatarOf(key, m.sender),
+                ),
+                lastDay,
             )
         }
     }
@@ -140,5 +231,16 @@ object UiMapping {
     }
 
     private fun chatDate(tsMs: Long): String =
-        SimpleDateFormat("d MMM", Locale.getDefault()).format(Date(tsMs))
+        DAY_MONTH.format(java.time.Instant.ofEpochMilli(tsMs))
+
+    /**
+     * Formatters are built once, not per row.
+     *
+     * SimpleDateFormat has to parse its pattern and load locale tables on construction, so
+     * building one per chat row was a measurable chunk of every boot. java.time formatters
+     * are immutable and thread-safe, so one instance can be reused.
+     */
+    private val DAY_MONTH: java.time.format.DateTimeFormatter =
+        java.time.format.DateTimeFormatter.ofPattern("d MMM", java.util.Locale.getDefault())
+            .withZone(java.time.ZoneId.systemDefault())
 }

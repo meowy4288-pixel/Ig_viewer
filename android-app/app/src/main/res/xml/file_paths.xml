@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only the clipboard staging directory is shareable. The export folder and the imported
+     archives are deliberately absent so no other app can read chat data through this provider. -->
+<paths>
+    <cache-path
+        name="clipboard"
+        path="clipboard/" />
+</paths>

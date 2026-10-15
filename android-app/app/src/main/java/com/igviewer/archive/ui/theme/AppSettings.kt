@@ -19,6 +19,16 @@ class AppSettings(private val prefs: Prefs) {
     var sfxEnabled by mutableStateOf(prefs.sfxEnabled)
     var autoplayVideos by mutableStateOf(prefs.autoplayVideos)
 
+    // Per-effect motion toggles (each additionally gated by [animations]).
+    var animScreen by mutableStateOf(prefs.animScreen)
+    var animThemeFade by mutableStateOf(prefs.animThemeFade)
+    var animPress by mutableStateOf(prefs.animPress)
+    var animListRise by mutableStateOf(prefs.animListRise)
+    var animCascade by mutableStateOf(prefs.animCascade)
+    var animDateTick by mutableStateOf(prefs.animDateTick)
+    var animFlare by mutableStateOf(prefs.animFlare)
+    var animJump by mutableStateOf(prefs.animJump)
+
     var theme: ThemeVariant
         get() = ThemeVariant.byId(themeId)
         set(value) {
@@ -50,7 +60,66 @@ class AppSettings(private val prefs: Prefs) {
         autoplayVideos = value
         prefs.autoplayVideos = value
     }
+
+    fun updateAnimScreen(value: Boolean) {
+        animScreen = value
+        prefs.animScreen = value
+    }
+
+    fun updateAnimThemeFade(value: Boolean) {
+        animThemeFade = value
+        prefs.animThemeFade = value
+    }
+
+    fun updateAnimPress(value: Boolean) {
+        animPress = value
+        prefs.animPress = value
+    }
+
+    fun updateAnimListRise(value: Boolean) {
+        animListRise = value
+        prefs.animListRise = value
+    }
+
+    fun updateAnimCascade(value: Boolean) {
+        animCascade = value
+        prefs.animCascade = value
+    }
+
+    fun updateAnimDateTick(value: Boolean) {
+        animDateTick = value
+        prefs.animDateTick = value
+    }
+
+    fun updateAnimFlare(value: Boolean) {
+        animFlare = value
+        prefs.animFlare = value
+    }
+
+    fun updateAnimJump(value: Boolean) {
+        animJump = value
+        prefs.animJump = value
+    }
 }
+
+/**
+ * The effective per-effect motion flags. Each field is already ANDed with the master
+ * [AppSettings.animations] switch by the caller, so a helper can just read its flag.
+ * Defaults are all-on so anything read before the provider mounts still animates.
+ */
+data class Motion(
+    val screen: Boolean = true,
+    val themeFade: Boolean = true,
+    val press: Boolean = true,
+    val listRise: Boolean = true,
+    val cascade: Boolean = true,
+    val dateTick: Boolean = true,
+    val flare: Boolean = true,
+    val jump: Boolean = true,
+)
+
+/** Effective per-effect motion flags, provided once at the root of the app. */
+val LocalMotion = staticCompositionLocalOf { Motion() }
 
 /** Tighter vertical padding in message rows and list rows. */
 val LocalCompactRows = staticCompositionLocalOf { false }

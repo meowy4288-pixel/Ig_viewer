@@ -2,8 +2,11 @@ package com.igviewer.archive.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -71,19 +74,44 @@ fun ArchAvatar(letter: String, width: Dp = 36.dp, height: Dp = 44.dp, fontSize: 
 }
 
 @Composable
-fun EmptyState(message: String) {
+fun EmptyState(message: String, hint: String? = null, action: (@Composable () -> Unit)? = null) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 48.dp),
+            .padding(horizontal = 24.dp, vertical = 40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
+        // A small mark so an empty list reads as designed rather than broken.
+        Box(
+            modifier = Modifier
+                .size(46.dp)
+                .clip(CircleShape)
+                .background(Tokens.Surface)
+                .border(1.dp, Tokens.Line, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = "\u2013", color = Tokens.Muted, fontSize = 20.sp)
+        }
+        Spacer(Modifier.height(12.dp))
         Text(
             text = message,
-            color = Tokens.Muted,
+            color = Tokens.Text,
             textAlign = TextAlign.Center,
             fontSize = 15.sp,
         )
+        if (!hint.isNullOrBlank()) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = hint,
+                color = Tokens.Muted,
+                textAlign = TextAlign.Center,
+                fontSize = 13.sp,
+            )
+        }
+        if (action != null) {
+            Spacer(Modifier.height(14.dp))
+            action()
+        }
     }
 }

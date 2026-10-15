@@ -46,18 +46,21 @@ private fun schemeFor(p: Palette) =
 @Composable
 fun IGArchiveTheme(
     variant: ThemeVariant = ThemeVariant.MIDNIGHT,
+    crossfade: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     // Publish the variant's palette into the app-wide tokens before anything reads it.
-    Tokens.apply(variant)
-    val colors = schemeFor(variant.palette)
+    // When crossfade is on, the palette animates per-colour instead of snapping.
+    val pal = variant.palette.animated(crossfade)
+    Tokens.apply(pal)
+    val colors = schemeFor(pal)
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
             window.statusBarColor = colors.background.toArgb()
             window.navigationBarColor = colors.background.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !variant.palette.isDark
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !pal.isDark
         }
     }
     MaterialTheme(colorScheme = colors, content = content)

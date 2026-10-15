@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Same glyph, single-colour, for Android 13+ themed icons. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108"
+    android:tint="#FFFFFF">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,18h48v4h-48zM26,22h56v4h-56zM22,26h4v4h-4zM82,26h4v4h-4zM18,30h8v4h-8zM46,30h16v4h-16zM82,30h8v4h-8zM18,34h8v4h-8zM38,34h32v4h-32zM82,34h8v4h-8zM18,38h8v4h-8zM34,38h40v4h-40zM82,38h8v4h-8zM18,42h8v4h-8zM34,42h12v4h-12zM62,42h12v4h-12zM82,42h8v4h-8zM18,46h8v4h-8zM30,46h12v4h-12zM66,46h12v4h-12zM82,46h8v4h-8zM18,50h8v4h-8zM30,50h12v4h-12zM66,50h12v4h-12zM82,50h8v4h-8zM18,54h8v4h-8zM30,54h12v4h-12zM66,54h12v4h-12zM82,54h8v4h-8zM18,58h8v4h-8zM30,58h12v4h-12zM66,58h12v4h-12zM82,58h8v4h-8zM18,62h8v4h-8zM34,62h12v4h-12zM62,62h12v4h-12zM82,62h8v4h-8zM18,66h8v4h-8zM34,66h40v4h-40zM82,66h8v4h-8zM18,70h8v4h-8zM38,70h32v4h-32zM82,70h8v4h-8zM18,74h8v4h-8zM46,74h16v4h-16zM82,74h8v4h-8zM22,78h4v4h-4zM82,78h4v4h-4zM26,82h56v4h-56zM30,86h48v4h-48z" />
+</vector>

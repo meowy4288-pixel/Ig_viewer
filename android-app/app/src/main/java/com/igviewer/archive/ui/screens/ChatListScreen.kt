@@ -7,10 +7,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -18,6 +19,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -27,13 +29,19 @@ import androidx.compose.ui.unit.sp
 import com.igviewer.archive.ui.components.AppBar
 import com.igviewer.archive.ui.components.ArchAvatar
 import com.igviewer.archive.ui.components.EmptyState
+import com.igviewer.archive.ui.theme.LocalMotion
+import com.igviewer.archive.ui.theme.ScreenPadding
 import com.igviewer.archive.ui.theme.Tokens
+import com.igviewer.archive.ui.theme.riseIn
+import com.igviewer.archive.ui.theme.sinkOnPress
 
 data class ChatItem(
     val key: String,
     val name: String,
     val lastMessage: String,
     val date: String,
+    /** Photo chosen for someone in this chat, if any. */
+    val avatarPath: String? = null,
 )
 
 @Composable
@@ -68,8 +76,8 @@ fun ChatListScreen(
             EmptyState("No chats yet.\nImport an archive to get started.")
         } else {
             LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(chats, key = { it.key }) { chat ->
-                    ChatRow(chat = chat, onClick = { onChatClick(chat.key) })
+                itemsIndexed(chats, key = { _, chat -> chat.key }) { i, chat ->
+                    ChatRow(chat = chat, index = i, onClick = { onChatClick(chat.key) })
                 }
             }
         }
@@ -77,17 +85,25 @@ fun ChatListScreen(
 }
 
 @Composable
-private fun ChatRow(chat: ChatItem, onClick: () -> Unit) {
+private fun ChatRow(chat: ChatItem, index: Int, onClick: () -> Unit) {
+    val motion = LocalMotion.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .riseIn(index, motion.listRise)
+            .sinkOnPress(motion.press, onClick)
+            .padding(horizontal = ScreenPadding, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ArchAvatar(letter = chat.name)
+        if (chat.avatarPath != null) {
+            AvatarImage(path = chat.avatarPath, size = 40.dp)
+        } else {
+            ArchAvatar(letter = chat.name)
+        }
         Spacer(Modifier.width(14.dp))
-        Column(modifier = Modifier.weight(1f)) {
+        // A fixed minimum height for the text block keeps every row the same height,
+        // so a one-line preview and a two-line one do not make the list jump.
+        Column(modifier = Modifier.weight(1f).heightIn(min = 42.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -111,7 +127,7 @@ private fun ChatRow(chat: ChatItem, onClick: () -> Unit) {
                 text = chat.lastMessage,
                 color = Tokens.Muted,
                 fontSize = 13.sp,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
         }
