@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -1493,6 +1494,20 @@ private fun GalleryOverlay(
     // Multi-select: paths currently ticked. Empty set means we are browsing, not selecting.
     var selected by remember { mutableStateOf(emptySet<String>()) }
     var selectMode by remember { mutableStateOf(false) }
+    // One scroll position per library tab, so returning to a tab lands where you left it.
+    val galleryScope = rememberCoroutineScope()
+    val gridState = rememberLazyGridState()
+    val voicesState = rememberLazyListState()
+    val scrollState = if (tab == 0) gridState else voicesState
+    val scrolledDown by remember {
+        derivedStateOf {
+            if (tab == 0) {
+                gridState.firstVisibleItemIndex > 3 || gridState.firstVisibleItemScrollOffset > 200
+            } else {
+                voicesState.firstVisibleItemIndex > 5 || voicesState.firstVisibleItemScrollOffset > 400
+            }
+        }
+    }
     val shownPaths = remember(shownMedia, shownVoices, tab) {
         if (tab == 0) shownMedia.map { it.path } else shownVoices.map { it.path }
     }
@@ -1509,6 +1524,17 @@ private fun GalleryOverlay(
     fun endSelect() {
         selected = emptySet()
         selectMode = false
+    }
+
+    // Selection belongs to ONE view. It used to survive a participant filter or a tab
+    // switch, so ticking three photos and then switching to voice notes meant Download sent
+    // all of them -- including files that were no longer on screen.
+    LaunchedEffect(filter, tab) { endSelect() }
+
+    // Belt and braces: never hand Download anything the current view is not showing.
+    fun selectedVisible(): List<String> {
+        val visible = shownPaths.toSet()
+        return selected.filter { it in visible }
     }
 
     Column(
@@ -1558,7 +1584,7 @@ private fun GalleryOverlay(
                     )
                 }
                 TextButton(
-                    onClick = { if (selected.isNotEmpty()) onDownloadMany(selected.toList()) },
+                    onClick = { onDownloadMany(selectedVisible()) },
                     enabled = selected.isNotEmpty(),
                 ) {
                     Text("Download", color = Tokens.Accent, fontSize = 13.sp)
@@ -1576,7 +1602,7 @@ private fun GalleryOverlay(
                     Text("Select all", color = Tokens.Accent, fontSize = 13.sp)
                 }
                 TextButton(
-                    onClick = { if (selected.isNotEmpty()) onDownloadMany(selected.toList()) },
+                    onClick = { onDownloadMany(selectedVisible()) },
                     enabled = selected.isNotEmpty(),
                 ) {
                     Text("Download", color = Tokens.Accent, fontSize = 13.sp)
@@ -1624,6 +1650,7 @@ private fun GalleryOverlay(
         }
         Hairline()
 
+        Box(modifier = Modifier.fillMaxSize()) {
         if (tab == 0) {
             if (shownMedia.isEmpty()) {
                 EmptyState(
@@ -1633,6 +1660,7 @@ private fun GalleryOverlay(
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(4),
+                    state = gridState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(6.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -1662,7 +1690,7 @@ private fun GalleryOverlay(
                         "Nothing was sent by $${if (filter != null) displayNameFor(filter) else "anyone"} in this chat.",
                     )
             } else {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(state = voicesState, modifier = Modifier.fillMaxSize()) {
                     items(shownVoices.size) { i ->
                         val e = shownVoices[i]
                         VoiceLibraryRow(
@@ -1681,6 +1709,22 @@ private fun GalleryOverlay(
         }
     }
 }
+            // Floating jump-to-top over whichever list is showing, so a long gallery is
+            // one tap from the start.
+            if (scrolledDown) {
+                SmallFab(
+                    light = true,
+                    onClick = {
+                        galleryScope.launch {
+                            if (tab == 0) gridState.animateScrollToItem(0)
+                            else voicesState.animateScrollToItem(0)
+                        }
+                    },
+                ) {
+                    Icon(Icons.Default.KeyboardArrowUp, "Back to top", tint = Tokens.Text)
+                }
+            }
+        }
 
 /**
  * A quiet placeholder shown while a thumbnail decodes, so empty cells do not flash text.
