@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import com.igviewer.archive.ui.components.fastScroll
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -84,6 +86,8 @@ fun SearchScreen(
 ) {
     var query by remember { mutableStateOf("") }
     var tab by remember { mutableIntStateOf(0) }
+    val messagesState = rememberLazyListState()
+    val notesState = rememberLazyListState()
 
     // Search runs off the composition thread and debounced. It used to be a synchronous
     // scan of every message in every chat on every keystroke, which visibly janked.
@@ -158,7 +162,12 @@ fun SearchScreen(
                     "Nothing matches \"$query\"",
                     "Try fewer words, or search your Notes tab instead.",
                 )
-                else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+                else -> LazyColumn(
+                    state = messagesState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .fastScroll(messagesState, Tokens.Muted),
+                ) {
                     items(results, key = { it.key + it.msgIndex + it.snippet + it.time }) { result ->
                         SearchResultRow(result, query) { onResultClick(result.key, result.msgIndex) }
                     }
@@ -173,7 +182,12 @@ fun SearchScreen(
                         "No notes match \"$query\"."
                     },
                 )
-                else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+                else -> LazyColumn(
+                    state = notesState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .fastScroll(notesState, Tokens.Muted),
+                ) {
                     items(visibleNotes, key = { it.note.id }) { nr ->
                         NoteResultRow(nr, query, onClick = { onNoteClick(nr) }, onDelete = { onNoteDelete(nr) })
                     }

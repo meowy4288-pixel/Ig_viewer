@@ -50,7 +50,6 @@ enum class MediaAction(val label: String, val hint: String) {
     Download("Download", "Save into your chosen folder"),
     Note("Note", "Attach a note you can search later"),
     Rename("Rename", "Give this person a display name"),
-    Photo("Photo", "Choose a picture for this person"),
 }
 
 /**
@@ -67,13 +66,10 @@ fun MessageActionsDialog(
     hasNote: Boolean = false,
     /** Hidden for a self-sent message: renaming yourself would break the "you" detection. */
     senderName: String = "",
-    /** Set when this person already has a photo, so the row can offer to change it. */
-    senderHasPhoto: Boolean = false,
     onCopy: () -> Unit,
     onDownload: () -> Unit,
     onNote: () -> Unit,
     onRename: () -> Unit,
-    onPhoto: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
@@ -95,7 +91,11 @@ fun MessageActionsDialog(
                 if (mediaCount > 0) {
                     ActionRow(
                         MediaAction.Download,
-                        subtitle = "Save $mediaCount file${if (mediaCount == 1) "" else "s"}",
+                        subtitle = if (mediaCount == 1) {
+                            "Save this file"
+                        } else {
+                            "Choose which of the $mediaCount files to save"
+                        },
                         onClick = onDownload,
                     )
                 }
@@ -106,11 +106,6 @@ fun MessageActionsDialog(
                 )
                 if (senderName.isNotBlank()) {
                     ActionRow(MediaAction.Rename, subtitle = senderName, onClick = onRename)
-                    ActionRow(
-                        MediaAction.Photo,
-                        subtitle = if (senderHasPhoto) "Change their photo" else "Add a photo",
-                        onClick = onPhoto,
-                    )
                 }
             }
         },
@@ -150,6 +145,7 @@ fun DownloadOnlyDialog(
 @Composable
 fun MediaChoiceDialog(
     files: List<String>,
+    title: String,
     onPick: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -159,7 +155,7 @@ fun MediaChoiceDialog(
         titleContentColor = Tokens.Text,
         textContentColor = Tokens.Muted,
         shape = RoundedCornerShape(18.dp),
-        title = { Text("Copy which file?", fontWeight = FontWeight.SemiBold) },
+        title = { Text(title, fontWeight = FontWeight.SemiBold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 files.forEach { path ->

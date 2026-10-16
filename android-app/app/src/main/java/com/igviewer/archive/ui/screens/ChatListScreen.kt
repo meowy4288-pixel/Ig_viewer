@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
@@ -29,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import com.igviewer.archive.ui.components.AppBar
 import com.igviewer.archive.ui.components.ArchAvatar
 import com.igviewer.archive.ui.components.EmptyState
+import com.igviewer.archive.ui.components.fastScroll
 import com.igviewer.archive.ui.theme.LocalMotion
 import com.igviewer.archive.ui.theme.ScreenPadding
 import com.igviewer.archive.ui.theme.Tokens
@@ -51,6 +53,7 @@ fun ChatListScreen(
     onSearchClick: () -> Unit,
     onSettingsClick: () -> Unit,
 ) {
+    val chatListState = rememberLazyListState()
     Column(
         modifier = Modifier.fillMaxSize(),
     ) {
@@ -75,7 +78,12 @@ fun ChatListScreen(
         if (chats.isEmpty()) {
             EmptyState("No chats yet.\nImport an archive to get started.")
         } else {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                state = chatListState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .fastScroll(chatListState, Tokens.Muted),
+            ) {
                 itemsIndexed(chats, key = { _, chat -> chat.key }) { i, chat ->
                     ChatRow(chat = chat, index = i, onClick = { onChatClick(chat.key) })
                 }

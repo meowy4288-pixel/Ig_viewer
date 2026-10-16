@@ -117,6 +117,7 @@ import com.igviewer.archive.data.Prefs
 import com.igviewer.archive.ui.components.ArchAvatar
 import com.igviewer.archive.ui.components.EmptyState
 import com.igviewer.archive.ui.components.Hairline
+import com.igviewer.archive.ui.components.fastScroll
 import com.igviewer.archive.ui.theme.LocalAnimations
 import com.igviewer.archive.ui.theme.LocalCompactRows
 import com.igviewer.archive.ui.theme.LocalMotion
@@ -242,6 +243,8 @@ fun ChatScreen(
     var actionTarget by remember { mutableStateOf<MessageItem?>(null) }
     var noteTarget by remember { mutableStateOf<MessageItem?>(null) }
     var copyChoices by remember { mutableStateOf<List<String>?>(null) }
+    /** The specific media file that was long-pressed, or null when the bubble was. */
+    var pressedFile by remember { mutableStateOf<String?>(null) }
     var renameTarget by remember { mutableStateOf<MessageItem?>(null) }
     /** Long-press on the chat logo opens the per-person menu. */
     var personMenuOpen by remember { mutableStateOf(false) }
@@ -399,11 +402,19 @@ fun ChatScreen(
     }
 
     /** Close any overlay and jump the chat list to [idx], highlighting that message. */
-    fun goToMessage(idx: Int) {
+    /**
+     * Jump to a message, optionally remembering WHICH file the user was looking at.
+     *
+     * [path] matters: arriving from the library's "View in chat" dropped it, so a later
+     * long-press on that message had no specific file to act on and fell back to every
+     * media item it carried.
+     */
+    fun goToMessage(idx: Int, path: String? = null) {
         if (messages.isEmpty() || idx < 0) return
         overlay = null
         videoOverlay = null
         galleryOpen = false
+        pressedFile = path
         val target = idx.coerceIn(0, messages.lastIndex)
         highlightIndex = target
         scope.launch { listState.animateScrollToItem(target) }
@@ -559,7 +570,9 @@ fun ChatScreen(
                     val maxBubble = maxWidth * 0.8f
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .fastScroll(listState, Tokens.Muted),
                         contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 88.dp),
                     ) {
                         itemsIndexed(
@@ -600,7 +613,7 @@ fun ChatScreen(
                                     controller = mediaController,
                                     onImageClick = { overlay = OverlayTarget(it) },
                                     onVideoClick = { videoOverlay = OverlayTarget(it) },
-                                    onLongPress = { actionTarget = msg },
+                                    onLongPress = { file -> pressedFile = file; actionTarget = msg },
                                     note = notedMessages[msg.msgIndex],
                                     avatarPath = msg.avatarPath,
                                     avatarKey = avatarKey,
@@ -654,7 +667,7 @@ fun ChatScreen(
                 onFilterChange = { galleryFilter = it; prefs.setGalleryFilter(chatKey, it) },
                 onOpenImage = { e -> overlay = OverlayTarget(e.path, e.msgIndex) },
                 onOpenVideo = { e -> videoOverlay = OverlayTarget(e.path, e.msgIndex) },
-                onGoToChat = { idx -> goToMessage(idx) },
+                onGoToChat = { idx, path -> goToMessage(idx, path) },
                 onClose = { galleryOpen = false },
                 onDownloadMany = { paths -> paths.forEach { transfer(it, false) } },
                 displayNameFor = { raw -> prefs.renamed(chatKey, raw) ?: raw },
@@ -665,7 +678,7 @@ fun ChatScreen(
             ImageOverlay(
                 path = target.path,
                 onClose = { overlay = null },
-                onViewInChat = target.msgIndex?.let { idx -> { goToMessage(idx) } },
+                onViewInChat = target.msgIndex?.let { idx -> { goToMessage(idx, target.path) } },
             )
         }
 
@@ -674,13 +687,16 @@ fun ChatScreen(
                 path = target.path,
                 onClose = { videoOverlay = null },
                 autoplay = autoplayVideos,
-                onViewInChat = target.msgIndex?.let { idx -> { goToMessage(idx) } },
+                onViewInChat = target.msgIndex?.let { idx -> { goToMessage(idx, target.path) } },
             )
         }
 
         // Long-press on a message: Copy, Download, Note.
         actionTarget?.let { target ->
-            val files = mediaOf(target)
+            // Prefer the file that was actually pressed. Falling back to "every file on the
+            // message" is what made a message of 11 photos quietly save all 11.
+            val pressed = pressedFile
+            val files = pressed?.let { listOf(it) } ?: mediaOf(target)
             MessageActionsDialog(
                 hasText = target.text.isNotBlank(),
                 mediaCount = files.size,
@@ -710,13 +726,8 @@ fun ChatScreen(
                     actionTarget = null
                     renameTarget = target
                 },
-                onPhoto = {
-                    actionTarget = null
-                    onPickAvatar(chatKey, target.rawSender)
-                },
-                senderHasPhoto = avatarFor(target.rawSender) != null,
                 senderName = if (target.isMe) "" else target.rawSender,
-                onDismiss = { actionTarget = null },
+                onDismiss = { actionTarget = null; pressedFile = null },
             )
         }
 
@@ -732,10 +743,12 @@ fun ChatScreen(
         copyChoices?.let { files ->
             MediaChoiceDialog(
                 files = files,
+                title = "Copy which file?",
                 onPick = { path -> copyChoices = null; transfer(path, true) },
                 onDismiss = { copyChoices = null },
             )
         }
+
 
         if (personMenuOpen) {
             PersonMenuDialog(
@@ -1004,9 +1017,14 @@ private fun DateCell(
 }
 
 @Composable
-private fun SmallFab(light: Boolean, onClick: () -> Unit, content: @Composable () -> Unit) {
+private fun SmallFab(
+    light: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+    content: @Composable () -> Unit,
+) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(48.dp)
             .clip(CircleShape)
             .background(if (light) Tokens.Surface else Tokens.Accent)
@@ -1131,7 +1149,7 @@ private fun MessageBlock(
     controller: MediaPlayerController,
     onImageClick: (String) -> Unit,
     onVideoClick: (String) -> Unit,
-    onLongPress: () -> Unit,
+    onLongPress: (String?) -> Unit,
     note: Note? = null,
     /** Photo shown beside this message; null falls back to an initial disc. */
     avatarPath: String? = null,
@@ -1189,16 +1207,16 @@ private fun MessageBubble(
     controller: MediaPlayerController,
     onImageClick: (String) -> Unit,
     onVideoClick: (String) -> Unit,
-    onLongPress: () -> Unit,
+    /**
+     * Long-press handler. [pressedPath] is the specific media item that was pressed, or
+     * null when the bubble itself was pressed.
+     */
+    onLongPress: (String?) -> Unit,
     /** The user's note on this message, or null when there is none. */
     note: Note? = null,
     /** Photo shown beside this message; null falls back to an initial disc. */
     avatarPath: String? = null,
     @Suppress("UNUSED_PARAMETER") avatarKey: Int = 0,
-    /** Multi-select: ticked messages get a filled circle. */
-    selected: Boolean = false,
-    selectMode: Boolean = false,
-    onToggleSelected: () -> Unit = {},
 ) {
     val bg = if (msg.isMe) Tokens.Accent else Tokens.Surface
     val fg = if (msg.isMe) Tokens.OnAccent else Tokens.Text
@@ -1253,29 +1271,12 @@ private fun MessageBubble(
         Box(
             modifier = Modifier
                 .widthIn(max = maxBubble)
-                .then(
-                    // A faint rule along the grouped edge, so consecutive messages from one
-                    // person read as a single turn.
-                    if (!groupedTop) {
-                        Modifier
-                    } else {
-                        Modifier.drawBehind {
-                            val x = if (msg.isMe) 0f else size.width
-                            drawLine(
-                                color = Tokens.Line.copy(alpha = 0.6f),
-                                start = Offset(x, 0f),
-                                end = Offset(x, size.height),
-                                strokeWidth = 2f * this.density,
-                            )
-                        }
-                    },
-                )
                 .widthIn(max = maxBubble)
                 .clip(shape)
                 .background(bg)
                 .combinedClickable(
                     onClick = {},
-                    onLongClick = onLongPress,
+                    onLongClick = { onLongPress(null) },
                 )
                 .padding(horizontal = 12.dp, vertical = if (compact) 6.dp else 8.dp),
         ) {
@@ -1295,7 +1296,7 @@ private fun MessageBubble(
                         MediaImage(
                             path = path,
                             onClick = { onImageClick(path) },
-                            onLongPress = onLongPress,
+                            onLongPress = { onLongPress(path) },
                         )
                     }
                     msg.audioFiles.forEach { path ->
@@ -1304,7 +1305,7 @@ private fun MessageBubble(
                             fg = fg,
                             bg = bg,
                             controller = controller,
-                            onLongPress = onLongPress,
+                            onLongPress = { onLongPress(path) },
                         )
                     }
                     msg.videoFiles.forEach { path ->
@@ -1312,7 +1313,7 @@ private fun MessageBubble(
                             path = path,
                             fg = fg,
                             onClick = { onVideoClick(path) },
-                            onLongPress = onLongPress,
+                            onLongPress = { onLongPress(path) },
                         )
                     }
                     if (msg.callDurationMs != null) {
@@ -1346,7 +1347,7 @@ private fun MessageBubble(
                 }
 
                 if (note != null) {
-                    NoteStrip(text = note.text, fg = fg, onClick = onLongPress)
+                    NoteStrip(text = note.text, fg = fg, onClick = { onLongPress(null) })
                 }
 
                 if (!groupedBottom) {
@@ -1476,7 +1477,8 @@ private fun GalleryOverlay(
     onFilterChange: (String?) -> Unit,
     onOpenImage: (GalleryEntry) -> Unit,
     onOpenVideo: (GalleryEntry) -> Unit,
-    onGoToChat: (Int) -> Unit,
+    /** Jump to a message in the chat, remembering [path] so long-press stays specific. */
+    onGoToChat: (Int, String) -> Unit,
     onClose: () -> Unit,
     /** Copies the given files into the download folder. */
     onDownloadMany: (List<String>) -> Unit,
@@ -1661,7 +1663,9 @@ private fun GalleryOverlay(
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(4),
                     state = gridState,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .fastScroll(gridState, Tokens.Muted),
                     contentPadding = PaddingValues(6.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1690,7 +1694,12 @@ private fun GalleryOverlay(
                         "Nothing was sent by $${if (filter != null) displayNameFor(filter) else "anyone"} in this chat.",
                     )
             } else {
-                LazyColumn(state = voicesState, modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
+                    state = voicesState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .fastScroll(voicesState, Tokens.Muted),
+                ) {
                     items(shownVoices.size) { i ->
                         val e = shownVoices[i]
                         VoiceLibraryRow(
@@ -1698,7 +1707,7 @@ private fun GalleryOverlay(
                             controller = controller,
                             selected = e.path in selected,
                             selectMode = selectMode,
-                            onGoToChat = { onGoToChat(e.msgIndex) },
+                            onGoToChat = { onGoToChat(e.msgIndex, e.path) },
                             onLongPress = { startSelect(e.path) },
                             onClick = { if (selectMode) toggle(e.path) },
                             displayNameFor = displayNameFor,
@@ -1707,13 +1716,17 @@ private fun GalleryOverlay(
                 }
             }
         }
-    }
-}
             // Floating jump-to-top over whichever list is showing, so a long gallery is
             // one tap from the start.
             if (scrolledDown) {
                 SmallFab(
                     light = true,
+                    // BottomEnd, explicitly. Without an alignment this composes at the
+                    // top-left of the Box and sits ON TOP of the header, where a tap meant
+                    // for something else lands on Select all -- selecting everything.
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(16.dp),
                     onClick = {
                         galleryScope.launch {
                             if (tab == 0) gridState.animateScrollToItem(0)
@@ -1725,6 +1738,8 @@ private fun GalleryOverlay(
                 }
             }
         }
+    }
+}
 
 /**
  * A quiet placeholder shown while a thumbnail decodes, so empty cells do not flash text.

@@ -153,7 +153,11 @@ fun flare(isTarget: Boolean, on: Boolean): Float {
         if (!isTarget) {
             glow.snapTo(0f)
         } else if (!on) {
-            glow.snapTo(0.8f)
+            // Snap to ZERO, not to the flare's peak. The peak only makes sense as part of
+            // the animation -- held there it is a permanent 80% wash over the whole
+            // message, which for a message carrying several media reads as "everything
+            // got selected" and never goes away.
+            glow.snapTo(0f)
         } else {
             glow.animateTo(
                 0.8f,
