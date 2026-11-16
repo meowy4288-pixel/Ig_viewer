@@ -1,0 +1,1090 @@
+================================================================================
+ IG-VIEWER ANDROID -- AGENT HANDBOOK
+ A complete map of the native Kotlin/Compose app, so nobody has to
+ reverse-engineer it again.
+================================================================================
+
+ Written for:        any human or AI agent about to change this app
+ App version:        0.2.7 (versionCode 9)
+ Git:                tag v0.2.7 (release commit on main)
+ Release APK SHA256: d0247eef82253411d82692b1b030522ef151f8f1d148d1b5ec922a9d0f369305
+ Repository root:    /home/kisa/ig-viewer          (desktop Tauri app lives there)
+ Android module:     /home/kisa/ig-viewer/android-app
+ Package:            com.igviewer.archive
+ Last verified:      2026-11 (source inspection of the checked-out tree)
+
+ This file describes what the code ACTUALLY does. Parts of three other documents
+ in the tree are stale and must not be trusted for architecture:
+
+   android-app/README.md        its "what exists" section says "Scaffolding
+                                only. Nothing here builds or runs yet." -- FALSE.
+                                (The pointer added at the top is correct; the rest
+                                of the historical text is not.) The app is a
+                                complete Kotlin reimplementation and builds/ships
+                                release APKs.
+   android-app/HANDOFF.md       describes a UniFFI/Rust-bridge plan and a
+                                `core/` directory -- that plan was abandoned.
+                                It is still useful for toolchain/history only.
+   AGENTS-ARCHITECTURE.md       says `core/` is reserved for a UniFFI bridge --
+                                there is no `core/` directory and no Rust code
+                                in the Android app.
+
+ Keep those documents or delete them, but do not code against them.
+
+
+================================================================================
+ 1. WHAT THIS APP IS
+================================================================================
+
+A fully offline Android viewer for an Instagram "Download your information" DM
+export (the JSON flavour, not HTML).
+
+Input:  a .zip of the export, or an already-unzipped folder.
+Output: a local chat list, per-chat message timeline, media playback, search,
+        notes, per-contact renames/photos, themes. Nothing leaves the device.
+
+The app is NOT:
+  - a sync client (no network permission at all, no INTERNET in the manifest)
+  - an editor of the export (the export folder is read-only, always)
+  - a replacement for the desktop Tauri app (separate codebase, separate build)
+  - backed by the Rust core (no JNI, no UniFFI, no `core/` module)
+
+Everything below the UI is a hand-written Kotlin port of the desktop Rust core's
+documented rules: scan layout, dedupe key, display order, text repair, media
+containment, MIME allowlist.
+
+
+================================================================================
+ 2. NON-NEGOTIABLE RULES
+================================================================================
+
+These come from the repository's AGENTS.md but are phrased for Android. Breaking
+one of these is a bug even if the feature "works".
+
+2.1 Offline, always
+    - No INTERNET / ACCESS_NETWORK_STATE permission. Do not add one.
+    - No analytics, crash reporting, auto-update, remote config, CDN fonts or
+      images. Everything is bundled in res/ or drawn with Compose.
+    - Any new dependency must work with networking disabled and must not phone
+      home at runtime.
+    - Verify: `grep -i internet android-app/app/src/main/AndroidManifest.xml`
+      must stay empty.
+
+2.2 The export folder is read-only
+    - Never write, rename, delete or create anything inside a picked export.
+    - All app writes go to app-private storage (filesDir / cacheDir) or to a
+      folder the user explicitly picked with the system picker (downloads).
+    - Media is opened read-only; downloads use a SAF tree URI, never the export.
+
+2.3 Every path/URI inside the JSON is untrusted
+    - Media URIs are resolved by MediaResolver only. It rejects `..`, absolute
+      paths, symlinked components and anything that escapes the root, and it
+      verifies the canonical path afterwards.
+    - Never build a File from a JSON string anywhere else.
+    - Never trust `thread key` / folder names as path segments blindly; the
+      existing code treats them as a single name under the inbox directory.
+
+2.4 Chat text is untrusted content
+    - Compose `Text(...)` is safe by default (no HTML parsing). Keep it that way.
+    - Never use AndroidView/WebView or Html.fromHtml to render message content.
+    - Links: LinkText() only makes http/https clickable. Do not make other
+      schemes clickable (no intent:, file:, content:, javascript:).
+    - Search highlighting uses buildAnnotatedString with explicit ranges; it
+      never re-parses the text as markup.
+
+2.5 No real chat data in the repository or in tests
+    - Tests use generated data only.
+    - Never copy a real export into the repo, a fixture, a screenshot or a log.
+    - Do not log message text, sender names or export paths. The app installs no
+      logger; keep it that way.
+
+2.6 Minimal, explained permissions
+    Current manifest permissions:
+      - MANAGE_EXTERNAL_STORAGE   (Android 11+): lets the app read the chosen
+        export in place instead of copying ~2 GB. Optional; user grants it in
+        system Settings. If denied, the app copies into app storage instead.
+      - READ_EXTERNAL_STORAGE (maxSdkVersion 29): the pre-Android-11 equivalent.
+      - ACCESS_NETWORK_STATE: NOT declared here. media3-common (ExoPlayer) merges
+        it in through its own manifest. It only lets a library read connectivity
+        state; it grants no network access, and there is still no INTERNET
+        permission. Removing it would mean overriding a dependency's manifest,
+        which was not done because local playback could not be device-tested.
+      - com.igviewer.archive.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: generated
+        by AGP for targetSdk 34+ as a self-scoped signature permission.
+    No other permission. If you add one, justify it in this file and in the
+    manifest comment, and prefer a SAF picker over a broad permission.
+    The check that matters is INTERNET:
+      grep -i internet android-app/app/src/main/AndroidManifest.xml   # must stay empty
+
+2.7 Explain every new dependency
+    Current runtime deps: core-ktx, lifecycle-runtime-ktx, activity-compose,
+    Compose BOM (ui, tooling, material3), media3-exoplayer.
+    Test deps: junit4, org.json (the real implementation, so ingest/JSON tests
+    run on the JVM instead of hitting Android's throwing stub).
+
+
+================================================================================
+ 3. PROJECT LAYOUT
+================================================================================
+
+android-app/
+  build.gradle.kts                  root build (plugins only)
+  settings.gradle.kts               module list, repositories
+  gradle.properties                 JVM args, AndroidX, non-transitive R
+  gradle/libs.versions.toml         version catalog (AGP, Kotlin, Compose, media3)
+  gradle/wrapper/...                Gradle wrapper (9.6.1)
+  gradlew                           build entry point
+  local.properties                  NOT COMMITTED. sdk.dir=... (create it)
+  DESIGN.md / DESIGN.html           visual design reference
+  tools/gen_sfx.py                  generates res/raw/sfx_tap (dev only)
+
+  app/build.gradle.kts              app config: SDKs, version, R8, signing, deps
+  app/proguard-rules.pro            -keepnames for serialized snapshot classes
+  app/src/main/AndroidManifest.xml  permissions, activity, FileProvider
+
+  app/src/main/java/com/igviewer/archive/
+    MainActivity.kt                 activity + ALL top-level state/orchestration
+    ui/Navigation.kt                Screen enum + NavState back stack
+    ui/Sfx.kt                       SoundPool tap sound (bundled sample)
+
+    data/
+      Models.kt                     MediaRef, KeptMessage, ThreadSummary, ...
+      Scanner.kt                    find inbox, validate message_N.json, bounded read
+      Ingest.kt                     JSON parse, dedupe, Text.fix, ordering
+      ArchiveIndex.kt               indexAll/loadSnapshot/saveSnapshot, media resolve,
+                                    self detection, chat-list previews
+      MediaResolver.kt              containment, MIME allowlist, byte sniffing, caches
+      ArchivePicker.kt              SAF folder/zip import + zip hardening
+      MediaSaver.kt                 download to SAF tree / copy to clipboard
+      MediaInfo.kt                  duration + poster frames (MediaMetadataRetriever)
+      ImportProgress.kt             progress model + formatBytes
+      Prefs.kt                      every persisted setting/override (SharedPreferences)
+      NoteStore.kt                  user notes (hand-rolled JSON in prefs)
+      Text.kt                       mojibake repair (Text.fix)
+      UiMapping.kt                  archive model -> screen view models, search
+
+    ui/components/
+      Common.kt                     AppBar, Hairline, ArchAvatar, EmptyState
+      Scrollbar.kt                  fastScroll for LazyColumn / LazyGrid
+      ArchShape.kt                  arched avatar/photo shape
+      WhoAmIDialog.kt               "who are you" chooser (global + per chat)
+
+    ui/screens/
+      ImportScreen.kt               pick + index screen
+      ChatListScreen.kt             chat list + ChatItem model
+      ChatScreen.kt                 THE BIG ONE: timeline, bubbles, overlays,
+                                    gallery, in-chat search, date strip (2.3k lines)
+      SearchScreen.kt               global search + Notes tab + highlightMatch
+      SettingsScreen.kt             all settings sections
+      MediaActions.kt               long-press sheet, transfer helper, rename/person
+                                    menus, note editor dialogs
+      MediaPlayback.kt              MediaPlayerController (ExoPlayer), voice notes,
+                                    video thumb/overlay
+
+    ui/theme/
+      Tokens.kt                     Palette, 7 themes, ThemeVariant, Tokens object
+      Theme.kt                      IGArchiveTheme (Material3 + status bars)
+      AppSettings.kt                live snapshot-state settings backed by Prefs
+      Motion.kt                     all animation modifiers + per-effect gates
+      ThumbDiskCache.kt             bitmap cache keyed by file path + size
+
+  app/src/test/java/com/igviewer/archive/
+    data/  ArchiveIndexTest, ChunkedMappingTest, ExtensionlessMediaTest,
+           MediaResolverSniffTest, MediaSearchTest, MultiArchiveIndexTest,
+           NoteStoreTest, ScannerLayoutTest, ThreadMediaLookupTest, UiMappingTest
+    ui/screens/HighlightMatchTest
+
+  app/src/main/res/
+    values/                       strings, themes
+    drawable/, mipmap-anydpi-v26/ icons
+    raw/sfx_tap                   bundled tap sound
+    xml/file_paths.xml            FileProvider: exposes ONLY cache/clipboard
+
+
+================================================================================
+ 4. BUILD, TEST, RUN
+================================================================================
+
+4.1 Toolchain (as configured)
+    compileSdk        35
+    minSdk            26
+    targetSdk         35
+    Java source/target 17   (jvmTarget 17)
+    Kotlin            2.0.21
+    AGP               8.7.3
+    Gradle wrapper    9.6.1
+    Compose BOM       2024.12.01
+    media3            1.5.1
+    Android SDK needs platform-35 + build-tools 35.
+
+    On this machine JDK 25 is installed. The SDK lives at `$HOME/Android/Sdk`
+    (installed 2026-11-17 with cmdline-tools, platform-tools, platforms;android-35,
+    build-tools;35.0.0; AGP additionally pulls build-tools;34.0.0). If it is
+    missing again, install it and point Gradle at it:
+
+      echo "sdk.dir=/absolute/path/to/Android/Sdk" > local.properties
+      # or: export ANDROID_HOME=/absolute/path/to/Android/Sdk
+      #     export ANDROID_SDK_ROOT=$ANDROID_HOME
+
+    local.properties is gitignored. Never commit it.
+
+4.2 Commands (run from android-app/)
+      ./gradlew :app:assembleDebug          # debug APK
+      ./gradlew :app:assembleRelease        # R8/minified release APK
+      ./gradlew :app:testDebugUnitTest      # 66 JVM unit tests
+      ./gradlew :app:testReleaseUnitTest    # same tests against release config
+      ./gradlew :app:lintDebug              # optional; see note below
+
+    Lint is DELIBERATELY disabled for release builds
+    (lint.checkReleaseBuilds = false). Lint's bundled engine cannot parse this
+    JDK's version string ("25.0.4.1") and would abort the release build. Do not
+    "fix" this by removing the flag in an environment where lint still breaks;
+    fix the JDK/lint mismatch first.
+
+4.3 Outputs
+    app/build/outputs/apk/release/app-release.apk
+    app/build/outputs/apk/debug/app-debug.apk
+
+    The release APK is signed with the DEBUG keystore on purpose, so it installs
+    straight over a debug install without uninstalling. It is still R8-minified
+    and resource-shrunk. Do not switch to a new signing key casually: users
+    would have to uninstall, losing imported data and notes.
+
+4.4 Release metadata
+    app/build.gradle.kts:
+      versionCode = 8
+      versionName = "0.2.6"
+    Bump BOTH for a new release.
+
+4.5 Changing serialized models (read before editing Models.kt)
+    ArchiveIndex snapshots use Java serialization.
+    - `Persisted` declares serialVersionUID = 1L, so its shape can grow and
+      missing fields read back as null/defaults.
+    - `KeptMessage`, `MediaRef` and `ThreadSummary` do NOT declare
+      serialVersionUID. Adding, removing or retyping a field changes the
+      computed UID, so existing per-thread snapshot files fail to deserialize.
+      ArchiveIndex.loadThread swallows the exception and returns null, which
+      becomes an EMPTY message list: the chat still appears in the list but
+      opens blank.
+    Consequence: after changing those classes, do not trust an old snapshot.
+    Either:
+      - add an explicit `serialVersionUID = 1L` to the class first and keep new
+        fields default-tolerant (missing fields then read back as null/0), or
+      - invalidate the snapshot so the app rebuilds from the saved roots
+        (Delete imported data, or introduce a schema marker), and re-import.
+    Test the upgrade path with an old snapshot before shipping.
+
+
+================================================================================
+ 5. ARCHITECTURE AT A GLANCE
+================================================================================
+
+  SAF picker (zip / folder)
+        |
+        v
+  ArchivePicker           extractZip / copyToAppStorage / directPath
+        |
+        v
+  Prefs.importedRoots     (accumulates; an import ADDS, never replaces)
+        |
+        v
+  ArchiveIndex.indexAll(roots, mediaRoots)
+        |-- Scanner.scan(root)        -> threads + ascending message_N.json
+        |-- readBounded + decodeText  -> UTF-8 (BOM stripped, Latin-1 fallback)
+        |-- Ingest.parseThreadFile    -> RawMessage
+        |-- Ingest.ingestThread       -> dedupe + Text.fix + order
+        `-- ThreadSummary + Map<key, List<KeptMessage>>
+        |
+        v
+  ArchiveIndex.saveSnapshot(filesDir/imports/index.snapshot)
+        |-- index.snapshot            manifest: roots + ThreadSummary list + counts
+        |-- imports/threads/<hash>    full List<KeptMessage> per thread
+        `-- imports/threads/<hash>.head  first 200 messages per thread
+        |
+        v
+  indexState (Compose MutableState<ArchiveIndex?>)
+        |
+        +--> UiMapping.chatItems(...)  --> ChatListScreen
+        |
+        `--> on chat open:
+               LaunchedEffect loads messages on IO
+               UiMapping.messageChunk(...) 250 first, then 400 per chunk
+               chatMessages (Compose state) --> ChatScreen
+                                                 |
+                                                 `--> UiMapping.mapRange
+                                                        resolves media via
+                                                        ArchiveIndex.mediaFile
+                                                        -> MediaResolver
+
+  UiMapping is the ONLY place where archive models become screen models.
+  Screens never touch ArchiveIndex, File or JSON directly (ChatScreen reaches
+  Prefs for display overrides and MediaActions for transfers).
+
+
+================================================================================
+ 6. DATA LAYER REFERENCE
+================================================================================
+
+6.1 Models.kt
+    MediaRef(kind, mediaIndex, uri)            Serializable
+      kind is one of: photos, videos, audio_files, gifs, sticker, files
+      uri is RAW, exactly as in the JSON (never Text.fix'ed)
+
+    KeptMessage(seq, fileNo, idxInFile, tsMs, sender, content, isUnsent,
+                callDuration, media, reactions, share)   Serializable
+      seq        per-thread RAW encounter counter BEFORE dedupe
+      sender     already Text.fix'ed
+      content    already Text.fix'ed, nullable
+      reactions  List<Pair<actorFixed, reactionFixed>>
+      share      (raw link, fixed share_text), nullable, NOT in the dedupe key
+
+    ThreadSummary(key, title, participants, keptCount, rawCount,
+                  firstTsMs, lastTsMs, lastPreview)      Serializable
+      lastPreview is precomputed so the chat list never loads messages.
+
+    ThreadIngest(title, participants, kept, rawCount)
+    SkipReason enum with stable codes: not-a-message-file, file-number-overflow,
+      duplicate-file-number, symlink, too-large, io-error, invalid-utf8,
+      malformed-json, invalid-schema, thread-unreadable
+    ThreadScan(key, files, skipped)
+    ScanResult(threads, skipped)
+
+6.2 Scanner.kt  (port of the Rust `scan` module)
+    - Inbox discovery is bounded to at most two wrapper levels:
+        <root>/your_instagram_activity/messages/inbox
+        <root>/messages/inbox
+        <root>/<w1>/your_instagram_activity/messages/inbox
+        <root>/<w1>/<w2>/your_instagram_activity/messages/inbox
+      If none exists, a bounded depth-5 walk finds directories that directly
+      contain message_N.json. It does not descend past a qualifying directory,
+      so it never wades through media trees.
+    - parseFileNumber accepts exactly `message_<digits>.json`; digits only,
+      <= 0xFFFFFFFF (else FileNumberOverflow).
+    - Symlinked thread dirs/files are skipped, not followed.
+    - Files larger than 32 MiB are skipped (MAX_JSON_BYTES); readBounded never
+      buffers past the cap.
+    - Duplicate numbers in one thread directory are rejected as a group.
+    - Returns files sorted by numeric suffix, ascending.
+    - Empty/non-message files are ignored silently, not counted as failures.
+
+6.3 Ingest.kt  (port of the Rust `ingest` module)
+    Dedupe key = (tsMs, senderName RAW, content RAW, mediaUris)
+      - mediaUris concatenates all six kinds in fixed order:
+          photos, videos, audio_files, gifs, sticker, files
+        each kind in on-disk order; it is a typed List<String>, never a joined
+        string (an `or` chain silently loses kinds).
+      - `sticker` is a SINGLE object in Instagram's schema, not an array.
+      - Reactions and share are NOT in the key.
+      - Values in the key are the RAW strings, before Text.fix.
+    Dedupe scope: a message from file N is dropped only if its key already
+      appeared in a file with a LOWER number. Identical messages WITHIN one file
+      are all kept. First-encountered copy wins.
+    Ordering: (tsMs ASC, seq DESC). seq increments for every raw encounter,
+      including dropped ones.
+    Text.fix is applied to: title, participants, sender, content, reaction actor
+      and reaction text, share_text. NOT to share link and NOT to media URIs.
+
+    parseThreadFile reads: title, participants[].name, messages[].
+    parseMessage reads: sender_name, timestamp_ms, content, is_unsent,
+      call_duration, photos[], videos[], audio_files[], gifs[], sticker{},
+      files[], reactions[]{actor, reaction}, share{link, share_text}.
+    Any other JSON is ignored. Malformed JSON throws JSONException and is counted
+    as a parse failure (the thread keeps going).
+
+6.4 ArchiveIndex.kt
+    Construction is private; use:
+      ArchiveIndex.index(root, onProgress)
+      ArchiveIndex.indexAll(roots, mediaRoots, onProgress)
+      ArchiveIndex.loadSnapshot(file)
+    Key facts:
+      - Multiple roots are merged into ONE archive. If two roots contain the
+        same thread key, BOTH get namespaced: "<rootSlug>\u00b7<key>" on both
+        sides. A single import keeps its plain keys, so existing per-chat prefs
+        (renames, avatars, gallery tab/filter) stay valid.
+      - rootByKey remembers which root a thread came from, so media resolves
+        against its own export first. This prevents two exports with the same
+        relative media path from stealing each other's photos.
+      - mediaRoots are extra folders used for MEDIA LOOKUP ONLY; they are never
+        scanned for threads, so adding one cannot inject chats.
+      - Thread list order: lastTsMs DESC, then title DESC (matches desktop).
+      - quickSelf(key): participants contains "me" ? "me" : first participant.
+        It reads only the in-memory summary -- never deserialises a thread. Use
+        it in list/row code. detectMe(key) loads messages and is for one-off
+        explicit detection only.
+      - allParticipantNames(): distinct names ranked by thread count DESC, then
+        alphabetically. Used by the global "who are you" chooser.
+      - mediaFile(uri, threadKey): tries the thread's root first, then every
+        root, then mediaRoots; uses per-thread basename maps and caches before
+        doing a canonical path resolve. Falls back to basename matching.
+      - messages(key): memory cache -> per-thread snapshot file -> empty list.
+        @Synchronized.
+      - headMessages(key): first 200 from the .head snapshot, or null when the
+        thread fits entirely in 200 or no head exists.
+
+    Snapshot format (private class Persisted, serialVersionUID = 1L):
+      rootPath, rootPaths?, rootByKeyPaths?, mediaRootPaths?, threads,
+      skippedFiles, parseFailures, skipReasons
+    Loading is tolerant: unreadable/incompatible snapshots return null and the
+    caller rebuilds from the saved roots. Missing newer fields are null-checked.
+
+    saveSnapshot also:
+      - deletes and rewrites imports/threads/ (so stale threads never linger)
+      - writes <sha256(threadKey)> for each non-empty thread
+      - writes <sha256(threadKey)>.head with msgs.take(200) when the thread is
+        longer than 200.
+    backfillHeads() writes missing .head files for archives imported by older
+    builds; it runs once in the background after restore.
+
+6.5 MediaResolver.kt
+    - mimeFor(uri): extension -> MIME from a deny-by-default allowlist. No
+      text/html, no image/svg+xml (script-capable).
+    - sniffMime(file): reads up to 32 bytes and detects png/jpeg/gif/webp/bmp,
+      wav/mp3/m4a/mp4/mov etc. Cached by path+length+lastModified. This is what
+      makes extensionless Instagram media render instead of becoming a chip.
+    - resolve(root, uri): the containment path.
+        1. reject empty segments, "." "..", absolute paths syntactically
+        2. walk EVERY component with symlink checks (a symlinked parent would
+           defeat a final-component-only check)
+        3. canonicalise and verify it is still inside the canonical root
+        4. follow "root is your_instagram_activity" quirk
+      Throws MediaException(status). Never returns an outside path.
+    - readCapped(root, uri, max)
+    - findInbox(root), resolveByBasename(root, threadKey, name)
+    - Caches: threadMediaCache (per root+thread basename map) and sniffCache.
+      These caches are why opening a chat is fast. Do not bypass them in hot
+      loops.
+
+6.6 ArchivePicker.kt (SAF)
+    - directPath(uri): maps a tree URI to a real path only when it is a plain
+      local file path AND all-files access is granted. Otherwise null.
+    - copyToAppStorage(uri, isFolder, destName): copies to
+      filesDir/imports/<destName>, recursively for trees, depth cap 32.
+    - extractZip(uri, destDir): streaming ZipInputStream first; on the known
+      "unexpected end of zlib input stream" failure (data descriptors / ZIP64
+      from phone compressors) it retries via ZipFile on a seekable cache copy.
+    - Hardening: backslash member names rejected, absolute/`..` members
+      rejected, canonical containment re-check, MAX_ZIP_FILES = 2,000,000,
+      MAX_ZIP_UNCOMPRESSED = 8 GiB, 64 KiB copy buffer (never buffers a member).
+    - Progress is reported at most every 4 MiB (PROGRESS_STEP).
+
+6.7 MediaSaver.kt
+    - download(context, treeUri, source): writes into the user-picked SAF tree,
+      creating a unique "name (2)" instead of overwriting.
+    - copyToClipboard(context, source, mime): clears cache/clipboard, copies the
+      file there, and exposes it through FileProvider so another app can paste
+      real media. The export file is never exposed.
+    - FileProviderUri.forFile(...) = getUriForFile(packageName + ".fileprovider")
+
+6.8 Prefs.kt (SharedPreferences "igv_prefs", MODE_PRIVATE)
+    Display / perspective
+      global_me                     global "who am I"
+      thread_me:<chatKey>           per-chat override
+    Appearance & behaviour
+      theme_id, text_scale, compact_rows, animations, autoplay_videos,
+      sfx_enabled,
+      anim_screen, anim_theme_fade, anim_press, anim_list_rise,
+      anim_cascade, anim_date_tick, anim_flare, anim_jump
+    Import / storage
+      export_path                   legacy single root
+      export_paths                  list of roots that make up the archive
+      imported_roots                every root ever imported (accumulates)
+      imported_fingerprints         "name|size|modified" to reject re-imports
+      media_roots                   newline-separated extra media folders
+      download_tree, download_tree_name
+      allfiles_prompt_dismissed
+    Per-chat UI state
+      gallery_filter:<chatKey>, gallery_tab:<chatKey>
+      rename:<chatKey>\u0000<rawName>            -> display name
+      contact_avatar:<chatKey>\u0000<rawName>    -> absolute app-private path
+    Notes
+      notes                         JSON array (see NoteStore)
+    Notes on design:
+      - Renames/avatars are keyed by RAW export name, not display name. A rename
+        or perspective flip must never move someone's photo.
+      - contactAvatar() deliberately does NOT stat the file: it is called once
+        per participant per chat at boot. A stale path self-heals (decode fails,
+        initial is drawn).
+      - Import ADDS to imported_roots; importing a second export keeps the first.
+        Delete-index clears all of it.
+
+6.9 NoteStore.kt
+    Note(archiveKey, threadKey, msgIndex, text, updatedAt), id = "a|t|i".
+    archiveKey is the import root's folder name (see MainActivity).
+    Stored in prefs as hand-rolled JSON, because org.json is a throwing stub in
+    local JVM tests. encode/decode are pure Kotlin and unit-tested.
+    API: all(prefs), save(prefs, note), delete(prefs, archive, thread, idx),
+         forMessage(prefs, archive, thread, idx), forgetArchive(prefs, archive).
+    A note is anchored to the kept-message INDEX, so deleting/re-importing an
+    archive invalidates notes -- which is why Delete-index calls forgetArchive.
+
+6.10 MediaInfo.kt
+    MediaMetadataRetriever wrapper: durationMs(path) cached (NONE = unreadable),
+    poster(path, maxPx) in a 16 MiB LruCache of downscaled bitmaps,
+    formatDuration(ms) -> "1:23" / "1:02:03".
+
+6.11 ImportProgress.kt
+    ImportProgress(phase [COPYING, EXTRACTING, INDEXING], fraction?, doneBytes,
+    totalBytes, doneItems, totalItems) + formatBytes().
+
+6.12 Text.kt
+    Text.fix(s): Instagram stores UTF-8 bytes misdecoded as Latin-1, producing
+    mojibake. The repair converts each char to a byte only if every char <= 0xFF,
+    then strict-UTF-8 decodes; on any failure it returns the original string.
+    Conservative by design. Never apply it to dedupe keys or media URIs.
+
+
+================================================================================
+ 7. UI LAYER REFERENCE
+================================================================================
+
+7.1 MainActivity.kt -- the composition root
+    Activity owns:
+      picker, prefs
+      pendingUri / pendingUris / pendingFolders / pendingIsFolder
+      indexState:   MutableState<ArchiveIndex?>
+      importStatus: MutableState<String?>
+      importProgress: MutableState<ImportProgress?>
+      snapshotFile = filesDir/imports/index.snapshot
+      avatarVersion: MutableIntState (bumped when a photo is stored)
+
+    ActivityResult launchers:
+      pickZip          OpenMultipleDocuments -> pendingUris (zips)
+      pickDir          OpenDocumentTree      -> pendingFolders (export folder)
+      pickDownloadDir  OpenDocumentTree      -> persists download tree + name
+      pickMediaFolder  OpenDocumentTree      -> adds an extra media root
+      pickAvatar       OpenDocument         -> stores a copied avatar
+
+    runImport(onDone):
+      1. fingerprint everything picked; keep only not-seen items
+         (name|size|modified). All duplicates -> "Already imported", no work.
+      2. folder: directPath when all-files access, else copyToAppStorage.
+         zip: extractZip into filesDir/imports/export/import-<slug>.
+      3. allRoots = (importedRoots + newPaths).distinct(); save prefs.
+      4. ArchiveIndex.indexAll(allRoots, prefs.mediaRoots) with progress.
+         The result is written to the snapshot if it has threads.
+      5. Empty archive: status explains the expected path and skip reasons.
+      6. Success: Toast with chat count + skipped count, saveExportPaths.
+    Nothing is written into the user's export at any point.
+
+    onCreate:
+      Reads the snapshot SYNCHRONOUSLY if it exists and is <= 512 KiB
+      (SYNC_SNAPSHOT_MAX_BYTES; a few KB in practice), so the app opens straight
+      onto the chat list with no splash.
+      Larger/missing snapshots fall through to AppRoot's async restore.
+
+    AppRoot (the big @Composable):
+      Owns navigation, selectedKey, targetMsgIndex, chatMessages, perspective
+      state, choosers, restore/opening state, and the whole screen switch.
+
+      chats = remember(index, renamesVersion, avatarVersion) { UiMapping.chatItems(
+          renameOf, avatarOf (never your own photo), selfOf ) }
+      selfOf uses quickSelf, NOT detectMe, because detectMe deserialises a whole
+      thread and the chat list asks for every chat at once.
+
+      Chat mapping (LaunchedEffect(index, selectedKey, chatSelf, avatarVersion)):
+        - load messages on Dispatchers.IO
+        - if <= 250 messages: map everything in one go
+        - else: first 250 (FIRST_CHUNK), publish, yield, then 400 at a time
+          (CHUNK), and publish the COMPLETE list exactly once at the end.
+        - Deliberately NOT keyed on renamesVersion: a rename only changes display
+          strings and must not re-map/re-render the entire chat.
+
+      Restore (LaunchedEffect(Unit)):
+        - snapshot fast path, else rebuild from savedExportPaths and save a new
+          snapshot, else forget the saved roots and say so.
+        - backfills .head files after a successful restore.
+        - "Opening your archive..." overlay while restoring.
+
+      Back: BackHandler(enabled = nav.canGoBack) -> nav.back()
+      Screen switch: AnimatedContent(targetState = nav.current, veil(...))
+
+    Screen wiring (same order as the when block):
+      IMPORT   ImportScreen(...)                 also runs autoImport from Settings
+      LIST     ChatListScreen(chats, click -> select + navigate CHAT)
+      CHAT     ChatScreen(chatName from the mapped list, chatMessages, ...)
+      SEARCH   SearchScreen(search = UiMapping.search, notes = NoteStore-derived
+               NoteResult list, result click -> select + targetMsgIndex + CHAT)
+      SETTINGS SettingsScreen(...)               imports hand off to IMPORT so the
+                                                 progress rail is visible
+    Global overlays: WhoAmIDialog (global + per chat), Lightbox placeholder,
+    first-run all-files prompt.
+
+7.2 Navigation.kt
+    Screen { IMPORT, LIST, CHAT, SEARCH, SETTINGS }
+    NavState: current (mutableStateOf), stack, navigate(), back(), resetTo(),
+    canGoBack. No Navigation-Compose dependency; this is a plain back stack.
+
+7.3 ChatListScreen.kt
+    ChatItem(key, name, lastMessage, date, avatarPath?).
+    Simple LazyColumn with fastScroll, search/settings icons, avatar or arch
+    initial, muted preview. No message loading happens here.
+
+7.4 ChatScreen.kt -- the core screen (read this before touching anything)
+    Public models:
+      MessageItem(sender, text, time, isMe, tsMs, isUnsent, callDurationMs,
+                  attachmentLabels, shareLink, shareText, imageFiles,
+                  audioFiles, videoFiles, reactions, daySeparator, msgIndex,
+                  rawSender, avatarPath)
+        - sender = possibly renamed display name
+        - rawSender = export spelling; all identity/lookups use this
+        - msgIndex = position in the kept list = note identity AND LazyColumn key
+      GalleryEntry(path, isVideo, msgIndex, sender, rawSender)
+      VoiceEntry(path, msgIndex, sender, rawSender, time)
+      OverlayTarget(path, msgIndex?)
+
+    State that lives in ChatScreen:
+      pickerOpen, overlay (PhotoPager), videoOverlay, galleryOpen
+      actionTarget/pressedFile (message long-press), noteTarget, copyChoices,
+      renameTarget, personMenuOpen, personPhotoTarget, personRenameTarget,
+      libraryDownload, notesVersion
+      searchOpen, query, matches, matchPos, highlightIndex, searchFocus
+      galleryTab/galleryFilter (persisted per chat via Prefs)
+      openCascade (keyed on chatKey, so it does not replay on message updates)
+      notedMessages (archiveKey + chatKey + notesVersion)
+
+    Layout:
+      header (back, avatar/name, person chooser, gallery, search)
+      optional SearchBar
+      DateStrip (reflects the topmost visible message's day; arrows/picker jump)
+      LazyColumn of MessageBlock
+      floating jump-to-top / jump-to-bottom FABs
+      overlays: Gallery, ImageOverlay, VideoOverlay, dialogs
+
+    Rendering invariants:
+      - LazyColumn key = msg.msgIndex (absolute, never shifts when chunks arrive)
+      - contentType = messageContentType(msg) so Compose reuses like compositions
+      - one BoxWithConstraints for the whole list; bubble width = 80% of max
+      - message grouping: same isMe and no day separator between neighbours
+      - target highlight uses flare(); open cascade only for the first ~8 items
+      - every text bubble is a Compose Text / buildAnnotatedString. Never HTML.
+
+    Search in chat:
+      debounce 160 ms, scan on Dispatchers.Default, highlight + scroll, wrap
+      prev/next, close clears state. Back closes overlays first.
+
+    Photo viewer (ImageOverlay) pages:
+      overlay is a PhotoPager(items, index), not a single path. Tapping a bubble
+      photo builds the list from chatPhotoTargets(messages) -- every message's
+      images in display order, videos/audio excluded -- and opens on the tapped
+      photo. Tapping a library tile builds it from the grid as shown
+      (galleryPhotoPager: same tab + participant filter, videos skipped).
+      HorizontalPager moves between pages; a counter shows "n / total" when there
+      is more than one. Pinch/pan/double-tap zoom stay on the photo, and while a
+      photo is zoomed the pager's userScrollEnabled is false so panning never
+      flips the page. "View in chat" uses the CURRENT page's msgIndex/path.
+      A path that is no longer in the list opens as a one-photo pager rather than
+      falling back to items[0] (photoPagerOf).
+
+    goToMessage(idx, path):
+      closes overlays, remembers pressedFile = path, highlights + scrolls.
+      Passing `path` is what makes "View in chat" from the gallery keep the
+      specific file for a later long-press (otherwise it falls back to every
+      media file on that message).
+
+7.5 SearchScreen.kt
+    SearchResult(key, msgIndex, chatName, snippet, date, time)
+    NoteResult(note, chatName, date, time)
+    Two tabs: Messages (calls the injected search lambda) and Notes.
+    highlightMatch(text, query) builds an AnnotatedString; it is a pure function
+    and is unit-tested (HighlightMatchTest).
+    Global search itself is UiMapping.search: in-memory, min 2 chars, 200 hits,
+    case-insensitive contains over message text only (not sender, not notes).
+
+7.6 SettingsScreen.kt
+    Sections:
+      Customization  theme picker (7 themes), text size slider 0.85..1.30,
+                     row density Cozy/Compact
+      Media          autoplay videos, download folder, extra media folders
+      Sound          sound effects
+      Motion         master + 8 per-effect switches, hidden entirely when
+                     MOTION_ENABLED is false
+      Chat           "You are" (global perspective)
+      Data & import  pick zip, pick folder, grant all-files, delete import
+    Delete always confirms first ("Delete imported data?").
+    Settings imports navigate to the Import screen and start themselves there;
+    they do not run invisibly.
+
+7.7 ImportScreen.kt
+    Pick zip / pick folder, show picked name, progress, status banner, expected
+    layout hint, download-folder row. Shows skip counts/reasons honestly when an
+    index skipped files.
+
+7.8 MediaActions.kt
+    MediaAction { Copy, Download, Note, Rename }
+    MessageActionsDialog(hasText, mediaCount, hasNote, senderName, callbacks)
+      - Copy: media if present, else text; multiple files -> chooser
+      - Download: every file (or the pressed one -- see below)
+      - Note / Rename (rename hidden for your own messages)
+    DownloadOnlyDialog, MediaChoiceDialog, NoteEditorDialog, NoteBadge,
+    RenameContactDialog, PersonMenuDialog, LoadOnChange
+    rememberMediaTransfer(prefs, onNeedFolder, onDone) -> (path, copy) -> Unit
+      - copy=true  -> cache/clipboard + FileProvider
+      - copy=false -> SAF download tree, requires one first
+      - Toasts the result and calls onDone
+    IMPORTANT: ChatScreen prefers `pressedFile` over all message media, so a
+    long-press on one photo saves/copies exactly one file.
+
+7.9 MediaPlayback.kt
+    MediaPlayerController(context): ExoPlayer wrapper (play/pause/seek/speed,
+    single active player, release). rememberMediaController() creates/keeps one.
+    VoiceNoteBubble, VideoThumb (poster frame), VideoOverlay (full screen,
+    autoplay flag), PlayPauseBadge, SeekBar.
+    Media is local files only; no URLs, no streaming.
+
+7.10 Components
+    AppBar, Hairline, ArchAvatar, EmptyState
+    fastScroll(state, color) for LazyListState and LazyGridState (draggable
+      gutter with a thumb; used by chat, search, gallery)
+    ArchShape: the arched photo/avatar silhouette
+    WhoAmIDialog(title, candidates, current, allowClear, onPick, onClear,
+                 onDismiss)
+
+7.11 Theme / motion / sound
+    Tokens: mutable snapshot state (Bg, Surface, Line, Accent, OnAccent,
+      AccentDim, Gilt, Text, Muted) + Serif + ScreenPadding. IGArchiveTheme
+      applies the palette; every composable reads Tokens dynamically.
+    ThemeVariant: MIDNIGHT, PORCELAIN, ROUGE_NOIR, BLUE_CORAL, COGNAC,
+      WHITE_SAND, ANTHRACITE. Adding an enum entry makes it appear in Settings.
+    AppSettings: snapshot-state mirror of Prefs. Every setter writes through to
+      Prefs immediately, so changes survive process death.
+    Motion: veil (screen), animated palette crossfade, sinkOnPress, riseIn,
+      settleIn, dayTick, flare, popIn/popOut. Each is gated by its own pref AND
+      the master `animations` flag; MOTION_ENABLED can disable the system.
+    ThumbDiskCache: decoded-bitmap cache keyed by path + target size; avoids
+      re-decoding images while scrolling.
+    Sfx: SoundPool with res/raw/sfx_tap, usage USAGE_MEDIA. enabled/volume synced
+      from settings. Bundled, no permissions, no network.
+
+
+================================================================================
+ 8. PERSISTENCE MAP (exact locations)
+================================================================================
+
+All paths are app-private; nothing is in the user's export folder.
+
+  filesDir/imports/index.snapshot          Persisted manifest (Serializable)
+  filesDir/imports/threads/<sha256(key)>   List<KeptMessage> per thread
+  filesDir/imports/threads/<sha256>.head   first 200 messages (fast open)
+  filesDir/imports/export/import-<slug>/   extracted zips
+  filesDir/imports/<destName>/             copied SAF trees
+  filesDir/avatars/<sha256(raw).take(24)>.<ext>   contact photos
+  filesDir/avatar.<ext>                    your default photo
+  cacheDir/clipboard/<name>                staged clipboard copy (cleared each use)
+  SharedPreferences "igv_prefs"            all settings/overrides/notes
+
+Lifecycle:
+  - Import ADDS roots; it does not delete the previous archive.
+  - "Delete imported data" (MainActivity.deleteIndex) sets indexState = null,
+    clears savedExportPaths / savedExportPath / importedRoots /
+    importedFingerprints, and deletes filesDir/imports recursively. That removes
+    the snapshot, all per-thread files AND every copied/extracted export in app
+    storage. The user's original export is untouched.
+  - AppRoot additionally calls NoteStore.forgetArchive for the current archive
+    before deleteIndex, so notes for that archive are dropped.
+  - Avatar files under filesDir/avatars and their prefs entries are NOT removed
+    by deleteIndex, despite the confirmation dialog saying "photos". Treat that
+    as a known mismatch if you touch deletion.
+  - Snapshot is rewritten after every successful import (and after adding a
+    media folder, which re-indexes).
+  - A snapshot that cannot be read is ignored and rebuilt from saved roots.
+
+
+================================================================================
+ 9. THREADING AND PERFORMANCE CONTRACT
+================================================================================
+
+  - Disk I/O and indexing: Dispatchers.IO
+  - Mapping (UiMapping) and in-chat search scans: Dispatchers.Default
+  - Compose state is only assigned on the main thread (LaunchedEffect /
+    lifecycleScope with withContext(Main) where needed).
+  - Never call ArchiveIndex.detectMe / messages() from a chat-list row or from
+    composition: that deserialises threads. Use quickSelf and ThreadSummary.
+  - Media resolution dominates mapping cost. Keep ArchiveIndex.mediaFile's order
+    (thread basename cache -> roots -> mediaRoots) and do not add per-message
+    directory scans.
+  - Formatters are hoisted: SimpleDateFormat is constructed once per mapping
+    pass, java.time formatters are static, because per-row construction was
+    measurable at boot.
+  - Chat open is progressive and intentionally publishes only twice: once at
+    250 messages, once when everything is ready. Publishing on every chunk made
+    per-chat effects re-run and looked like an endless reload.
+  - LazyColumn identity is msgIndex; adding/removing list items must not change
+    existing indices. If a feature filters messages, do NOT renumber msgIndex --
+    it is also the note key.
+  - Bitmap work: ThumbDiskCache + MediaInfo.posters (16 MiB LruCache). Avoid
+    decoding full-size images per recomposition.
+  - Prefs lookups are cheap but not free; avatar/rename lookups are called per
+    participant per chat at boot, which is why contactAvatar does not stat files.
+
+
+================================================================================
+ 10. EXTENSION RECIPES
+================================================================================
+
+10.1 Add a new field/message type from the JSON
+    Files, in order:
+      1. data/Ingest.kt
+         - add the field to RawMessage and parse it in parseMessage()
+         - decide explicitly: is it part of the dedupe key? (Almost never.
+           Reactions and share are not.) If yes, add it to DedupeKey.
+      2. data/Models.kt
+         - add it to KeptMessage (Serializable). Read section 4.5 first: these
+           classes have no explicit serialVersionUID, so changing them
+           invalidates existing snapshots unless you handle that.
+      3. Ingest.ingestThread: copy it through, applying Text.fix if it is text.
+      4. data/UiMapping.kt mapRange: map it to MessageItem (resolve media only
+         if it is renderable inline; otherwise add an attachment label).
+      5. ui/screens/ChatScreen.kt: add the field to MessageItem and render it in
+         MessageBlock/MessageBubble. Update messageContentType() if the bubble
+         shape changes.
+      6. Add a unit test in app/src/test/.../data/ (fake JSON string only).
+    Do not reorder MEDIA_KINDS; the order is part of the dedupe contract.
+
+10.2 Add a setting
+      1. data/Prefs.kt: add a key const + a typed var (or per-chat function).
+      2. ui/theme/AppSettings.kt: add `var x by mutableStateOf(prefs.x)`, and a
+         setter that writes through to prefs (follow updateXxx methods).
+      3. ui/screens/SettingsScreen.kt: add a SwitchRow/TextRow/SegmentedRow in
+         the right Section.
+      4. Read it where needed. SettingsScreen receives `settings: AppSettings`
+         from AppRoot; screens that need a value either take it as a parameter
+         (like autoplayVideos) or read the existing composition locals
+         (LocalAnimations, LocalCompactRows, LocalMotion, LocalSfx). There is no
+         LocalSettings; add a new one deliberately if a value is needed deep in
+         the tree.
+    For per-chat settings, follow galleryTab/galleryFilter: store under a key
+    suffixed with chatKey and read with remember(chatKey).
+
+10.3 Add a screen
+      1. ui/Navigation.kt: add a value to enum Screen.
+      2. ui/screens/NewScreen.kt: @Composable taking callbacks, using Tokens and
+         shared components.
+      3. MainActivity.AppRoot: add a `Screen.X -> NewScreen(...)` branch in the
+         AnimatedContent `when`.
+      4. Add an entry point (button) and call nav.navigate(Screen.X).
+      5. Back works automatically if you used nav.navigate (BackHandler is
+         already wired to nav.canGoBack).
+    Screens must not take ArchiveIndex; pass plain models/lambdas.
+
+10.4 Add a media action
+      1. ui/screens/MediaActions.kt: extend enum MediaAction if it is a new
+         action kind, add a row to MessageActionsDialog (or a new dialog).
+      2. Implement the operation in data/ (e.g. MediaSaver) returning
+         Result<...>; never write into the export.
+      3. Wire it in ChatScreen where `actionTarget` is handled, and in the
+         gallery if it should be available there too.
+      4. Use rememberMediaTransfer's pattern (IO + Toast + onDone) or extend it.
+    Keep the "pressed file wins over all files" behaviour.
+
+10.5 Add search capability (e.g. search senders or notes in messages tab)
+      - Keep the filter function pure and fast; it runs over every kept message.
+      - Global: UiMapping.search(index, query, limit). Chats are searched in
+        list order; 200-hit cap. Change the cap consciously.
+      - In-chat: ChatScreen's LaunchedEffect(query, chatKey) scans
+        `messages[it].text`. Keep it debounced and off the main thread.
+      - Do not use org.json/HTML for highlighting; use buildAnnotatedString.
+
+10.6 Add a theme
+      - ui/theme/Tokens.kt: add a Palette val and a ThemeVariant entry with a
+        unique id + label. It appears in Settings automatically.
+      - Check both dark and light values: background, surface, line, accent,
+        onAccent, accentDim, gilt, text, muted.
+
+10.7 Add a persisted per-message annotation (like notes)
+      - Prefer extending NoteStore if it is note-like; otherwise create a store
+        with the same identity (archiveKey, threadKey, msgIndex) and the same
+        pure-Kotlin encode/decode (so it is testable on the JVM).
+      - Drop it in Delete-index alongside NoteStore.forgetArchive.
+      - Never persist message text or file paths in an annotation.
+
+10.8 Change import behaviour
+      - ArchivePicker owns picking/copying/zip hardening; ArchiveIndex.indexAll
+        owns roots/keys/scanning/ingest; MainActivity.runImport owns orchestration
+        and progress.
+      - Keep: fingerprint dedupe, add-not-replace roots, read-only export,
+        honest skip reporting, snapshot rewrite.
+      - If you change thread key namespacing, existing per-chat prefs and notes
+        will silently stop matching. Avoid unless you also migrate them.
+
+
+================================================================================
+ 11. INVARIANTS AND TRAPS (reviewer checklist)
+================================================================================
+
+  1. No INTERNET permission; no network calls anywhere.
+  2. No write to the picked export. Only filesDir/cacheDir/SAF download tree.
+  3. Media paths only via MediaResolver/ArchiveIndex.mediaFile.
+  4. Message text only via Compose Text/AnnotatedString; links only http(s).
+  5. Dedupe key: ts, raw sender, raw content, ordered media URIs; reactions and
+     share excluded; sticker is a single object.
+  6. Order: ts ASC, seq DESC; seq assigned before dedupe for every raw message.
+  7. Within one file, identical messages are all kept; dedupe only against
+     lower-numbered files.
+  8. Text.fix applies to display text only, never to keys or media URIs.
+  9. msgIndex is absolute and stable: it is both the LazyColumn key and the
+     note identity. Never renumber it.
+ 10. rawSender is the identity for renames/photos/perspective; `sender` is
+     display-only.
+ 11. Chat list rows use quickSelf/ThreadSummary, never messages()/detectMe().
+ 12. Media kind order in Ingest.MEDIA_KINDS must not change (dedupe + UI).
+ 13. Zip import: reject backslashes, absolute paths, `..`, symlinks; enforce
+     file-count and uncompressed-size caps; stream, never buffer a member.
+ 14. FileProvider exposes ONLY cache/clipboard. Do not add export paths to
+     file_paths.xml.
+ 15. Persisted Serializable classes: `Persisted` has an explicit
+     serialVersionUID = 1L, but KeptMessage / MediaRef / ThreadSummary do not.
+     Any field change to those silently invalidates every per-thread snapshot
+     file (loadThread returns null, so chats open blank) even though the
+     manifest still loads. Add explicit serialVersionUID before changing them,
+     or invalidate the snapshot and rebuild. Keep proguard -keepnames.
+ 16. Snapshot/serialization changes require bumping nothing by default, but
+     verify an old snapshot still loads or fails gracefully to a rebuild.
+ 17. Do not commit local.properties, build/ or any real export.
+ 18. Do not bump versionName without versionCode.
+ 19. Keep the debug signing config unless you deliberately accept that users
+     must uninstall to upgrade.
+ 20. Lint is disabled for release because of the JDK 25 version-string bug; do
+     not silently remove the flag without verifying lint runs.
+
+
+================================================================================
+ 12. TESTS
+================================================================================
+
+66 JVM unit tests in 12 files, run with:
+    ./gradlew :app:testDebugUnitTest
+
+  data/ArchiveIndexTest          2   snapshot/index basics
+  data/ChunkedMappingTest        4   messageChunk boundaries + day separators
+  data/ExtensionlessMediaTest    1   extensionless media still resolves
+  data/MediaResolverSniffTest    3   byte sniffing / MIME decisions
+  data/MediaSearchTest           5   UiMapping.search behaviour
+  data/MultiArchiveIndexTest     7   multi-root merge, key namespacing, media roots
+  data/NoteStoreTest            10   note encode/decode/persistence semantics
+  data/ScannerLayoutTest        10   inbox layouts, file numbering, skips
+  data/ThreadMediaLookupTest     7   per-thread media lookup/containment
+  data/UiMappingTest             3   chat title/self/rename mapping
+  ui/screens/HighlightMatchTest  5   search highlight ranges
+  ui/screens/PhotoPagerTest      9   photo viewer paging order/selection
+
+Testing notes:
+  - Tests are plain JUnit4 on the JVM. org.json is on the test classpath as the
+    REAL implementation; Android's stub throws.
+  - No Robolectric, no instrumentation tests, no Compose UI tests.
+  - Fixtures are inline generated strings/temp files. Never add real data.
+  - When adding logic, put it in a pure function/object under data/ (or a pure
+    helper like highlightMatch) so it is testable without Android.
+  - Compose screens are intentionally thin; behaviour that matters belongs in
+    data/ and should get a test there.
+
+
+================================================================================
+ 13. RELEASE PROCESS (as used for v0.2.6)
+================================================================================
+
+  1. Bump versionCode and versionName in app/build.gradle.kts.
+  2. Run ./gradlew :app:testDebugUnitTest and :app:assembleRelease.
+  3. Confirm the APK: app/build/outputs/apk/release/app-release.apk
+     (v0.2.6: 1,843,175 bytes, SHA-256
+      f1041d290ab74ada75a27c32c34db32aa32a3edae97aa9a4dc8499d5ac8e2652)
+  4. Commit with a message describing the user-visible change.
+  5. Tag vX.Y.Z and push main + tag.
+  6. Create the GitHub release with the APK named
+     ig-viewer-android-X.Y.Z.apk, on repo meowy4288-pixel/Ig_viewer.
+     Verify the asset digest matches the local SHA-256.
+  7. Install target: over an existing debug/release install (same debug key).
+
+  v0.2.7 facts for reference:
+    versionCode 9, 1,859,555 bytes, SHA-256
+      d0247eef82253411d82692b1b030522ef151f8f1d148d1b5ec922a9d0f369305
+    Signed with the Android debug key. THIS MACHINE's ~/.android/debug.keystore
+    did not exist when 0.2.7 was built, so Gradle generated a NEW one
+    (cert SHA-256 4676bad7ad1425f72faff6b56c848e5912d36895ac5f655e50edc9276632ef5b).
+    Installing over a 0.2.6 build therefore needs ONE uninstall first; imported
+    data and notes live in app storage and do not survive that. Future releases
+    built on this machine keep this key, so the upgrade path is normal again.
+    What changed: the full-screen photo viewer pages (swipe left/right, n / total
+    counter), including from the library's filtered grid; pinch/double-tap zoom
+    still works and locks paging while a photo is zoomed. 66 JVM tests pass.
+
+  v0.2.6 facts for reference:
+    commit fcfec94, tag/release v0.2.6, asset byte-identical to the local build,
+    no CI workflows, no newer drafts. Release notes mention fixing View-in-chat
+    file targeting and adding the fast-scroll gutter.
+
+  Do NOT publish the debug APK; it is much larger and not R8-optimized.
+
+
+================================================================================
+ 14. KNOWN LIMITATIONS / STALE THINGS / GOTCHAS
+================================================================================
+
+  - HANDOFF.md and README.md are stale (see the top of this file).
+  - A stale comment above `pendingFolders` in MainActivity claims an import
+    replaces the previous export. The code does the opposite: runImport ADDS to
+    prefs.importedRoots and re-indexes every root. Trust the code.
+  - app/build.gradle.kts still carries a comment "The Rust core ships as a JNI
+    library per ABI" above `packaging { jniLibs }`. There is no Rust core; the
+    packaging block is harmless.
+  - Lightbox in MainActivity is a placeholder ("Full-size image"); real viewing
+    uses ChatScreen's ImageOverlay. Do not confuse them.
+  - Global search is an in-memory full scan (200-hit cap, min 2 chars, text
+    only). For very large archives this is linear; there is no FTS index.
+  - Notes are anchored to message indices. Re-importing an archive invalidates
+    them, which is why Delete-index forgets them. There is no migration.
+  - Snapshot serialization is Java-serialization based. `Persisted` is
+    version-tolerant (serialVersionUID = 1L), but KeptMessage/MediaRef/
+    ThreadSummary have no explicit UID, so a field change makes old thread files
+    unreadable while the manifest still loads -- chats then open blank until a
+    rebuild/re-import. See section 4.5.
+  - Multi-export keys are namespaced only on genuine collisions
+    ("<rootSlug>\u00b7<key>"). Per-chat prefs written before a collision import
+    will not follow the renamed key.
+  - The "who am I" list is built from distinct senders/participants actually
+    present in the thread; someone who never posted may not appear.
+  - Media resolution covers photos, gifs, stickers, audio_files, videos; other
+    kinds (`files`) render as an attachment chip. Extensionless files rely on
+    byte sniffing.
+  - The app copies a picked folder unless all-files access is granted. A revoked
+    grant after an in-place import makes the saved root unreadable; restore then
+    forgets it and asks for a re-import.
+  - Sound effects are bundled (res/raw/sfx_tap); regenerate with
+    tools/gen_sfx.py if the asset ever needs changing.
+  - No instrumentation coverage: UI regressions are not caught by the test suite.
+  - Photo paging in the full-screen viewer covers the photos of the messages that
+    are currently loaded (first 250, then 400 per chunk), the same set the
+    library is built from. Older photos appear once their messages load.
+
+
+================================================================================
+ 15. QUICK SYMBOL INDEX
+================================================================================
+
+  Import:        ArchivePicker.extractZip / copyToAppStorage / directPath
+                 MainActivity.runImport / rebuildIndex
+  Scan:          Scanner.scan / inboxDir / parseFileNumber / readBounded
+  Parse+dedupe:  Ingest.parseThreadFile / ingestThread / mediaUris / mediaRefs
+  Index:         ArchiveIndex.indexAll / loadSnapshot / saveSnapshot /
+                 headMessages / backfillHeads / mediaFile / quickSelf /
+                 detectMe / allParticipantNames
+  Media safety:  MediaResolver.mimeFor / sniffMime / resolve / resolveByBasename /
+                 readCapped / findInbox
+  Models->UI:    UiMapping.chatItems / messageChunk / messageItems / search
+  Notes:         NoteStore.all / save / delete / forMessage / forgetArchive
+  Prefs:         Prefs.* (see section 6.8), AppSettings.*
+  Chat UI:       ChatScreen / MessageBlock / MessageBubble / GalleryOverlay /
+                 ImageOverlay / VideoOverlay / DateStrip / SearchBar
+  Actions:       MessageActionsDialog / rememberMediaTransfer / MediaSaver.*
+  Playback:      MediaPlayerController / rememberMediaController /
+                 VoiceNoteBubble / VideoThumb / VideoOverlay
+  Theme:         IGArchiveTheme / Tokens / ThemeVariant / Palette / Motion.*
+  Settings UI:   SettingsScreen (Section / ExpandableSection / SwitchRow ...)
+
+  If you only remember one thing: archive models are produced by
+  Scanner -> Ingest -> ArchiveIndex, converted to screen models ONLY by
+  UiMapping, and screens never touch files or JSON.
+
+
+================================================================================
+ END OF HANDBOOK
+================================================================================

@@ -2,6 +2,10 @@
 
 Native Kotlin/Compose app for viewing Instagram DM archives on Android.
 
+> **Start here:** `docs/AGENT-HANDBOOK.txt` is the authoritative map of the
+> codebase (data flow, persistence, UI wiring, invariants, extension recipes,
+> build/release steps). Parts of this README are historical and out of date.
+
 ## Why this exists separately from the Tauri app
 
 The desktop app in the repo root is Tauri (Rust core + webview UI) and it stays

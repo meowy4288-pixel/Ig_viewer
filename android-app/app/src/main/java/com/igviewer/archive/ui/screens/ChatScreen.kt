@@ -13,9 +13,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.rememberTransformableState
-import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -39,6 +41,8 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -89,6 +93,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -201,6 +206,35 @@ data class VoiceEntry(
 /** A full-screen overlay target: a media path plus the message it came from. */
 data class OverlayTarget(val path: String, val msgIndex: Int? = null)
 
+/** The photos the full-screen viewer can page through, and the one it opens on. */
+data class PhotoPager(val items: List<OverlayTarget>, val index: Int)
+
+/**
+ * Build a pager from an ordered list of photos, opening on [from].
+ *
+ * When [from] is not in the list -- a caller re-opening while the chat has moved on --
+ * it becomes a one-photo pager. Opening the list's first photo instead would show a
+ * picture the user never tapped.
+ */
+internal fun photoPagerOf(items: List<OverlayTarget>, from: String): PhotoPager {
+    val at = items.indexOfFirst { it.path == from }
+    return if (at >= 0) PhotoPager(items, at) else PhotoPager(listOf(OverlayTarget(from)), 0)
+}
+
+/**
+ * Photos in a chat, in display order: each message's images, in on-message order.
+ *
+ * Videos and voice notes are deliberately absent -- they have their own full-screen
+ * players, and swiping onto one from a photo would swap the kind of viewer underneath
+ * the user.
+ */
+internal fun chatPhotoTargets(messages: List<MessageItem>): List<OverlayTarget> =
+    messages.flatMap { m -> m.imageFiles.map { OverlayTarget(it, m.msgIndex) } }
+
+/** Photos in one library view, in grid order, skipping the videos in the same grid. */
+internal fun galleryPhotoPager(entries: List<GalleryEntry>, from: String): PhotoPager =
+    photoPagerOf(entries.filter { !it.isVideo }.map { OverlayTarget(it.path, it.msgIndex) }, from)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
@@ -233,7 +267,7 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var pickerOpen by remember { mutableStateOf(false) }
-    var overlay by remember { mutableStateOf<OverlayTarget?>(null) }
+    var overlay by remember { mutableStateOf<PhotoPager?>(null) }
     var videoOverlay by remember { mutableStateOf<OverlayTarget?>(null) }
     var galleryOpen by remember { mutableStateOf(false) }
     val mediaController = rememberMediaController()
@@ -276,6 +310,9 @@ fun ChatScreen(
         }
         out
     }
+    // Photos in this chat, in display order, so the full-screen viewer can swipe
+    // between them without rebuilding the list on every tap.
+    val chatPhotos = remember(messages) { chatPhotoTargets(messages) }
     // Every voice note in the chat, for the voice-note gallery.
     val voiceEntries = remember(messages) {
         val out = ArrayList<VoiceEntry>()
@@ -611,7 +648,7 @@ fun ChatScreen(
                                     groupedBottom = groupedBottom,
                                     maxBubble = maxBubble,
                                     controller = mediaController,
-                                    onImageClick = { overlay = OverlayTarget(it) },
+                                    onImageClick = { overlay = photoPagerOf(chatPhotos, it) },
                                     onVideoClick = { videoOverlay = OverlayTarget(it) },
                                     onLongPress = { file -> pressedFile = file; actionTarget = msg },
                                     note = notedMessages[msg.msgIndex],
@@ -665,7 +702,7 @@ fun ChatScreen(
                 filter = activeFilter,
                 onTabChange = { galleryTab = it; prefs.setGalleryTab(chatKey, it) },
                 onFilterChange = { galleryFilter = it; prefs.setGalleryFilter(chatKey, it) },
-                onOpenImage = { e -> overlay = OverlayTarget(e.path, e.msgIndex) },
+                onOpenImage = { e, images -> overlay = galleryPhotoPager(images, e.path) },
                 onOpenVideo = { e -> videoOverlay = OverlayTarget(e.path, e.msgIndex) },
                 onGoToChat = { idx, path -> goToMessage(idx, path) },
                 onClose = { galleryOpen = false },
@@ -674,11 +711,11 @@ fun ChatScreen(
             )
         }
 
-        overlay?.let { target ->
+        overlay?.let { pager ->
             ImageOverlay(
-                path = target.path,
+                pager = pager,
                 onClose = { overlay = null },
-                onViewInChat = target.msgIndex?.let { idx -> { goToMessage(idx, target.path) } },
+                onViewInChat = { idx, path -> goToMessage(idx, path) },
             )
         }
 
@@ -1475,7 +1512,8 @@ private fun GalleryOverlay(
     filter: String?,
     onTabChange: (Int) -> Unit,
     onFilterChange: (String?) -> Unit,
-    onOpenImage: (GalleryEntry) -> Unit,
+    /** Opens a photo, handing over the photos currently on screen so the viewer pages. */
+    onOpenImage: (GalleryEntry, List<GalleryEntry>) -> Unit,
     onOpenVideo: (GalleryEntry) -> Unit,
     /** Jump to a message in the chat, remembering [path] so long-press stays specific. */
     onGoToChat: (Int, String) -> Unit,
@@ -1680,7 +1718,10 @@ private fun GalleryOverlay(
                             selectMode = selectMode,
                             onClick = {
                                 if (selectMode) toggle(e.path)
-                                else if (e.isVideo) onOpenVideo(e) else onOpenImage(e)
+                                // The viewer pages through the grid as it stands: same tab,
+                                // same participant filter, videos skipped.
+                                else if (e.isVideo) onOpenVideo(e)
+                                else onOpenImage(e, shownMedia.filter { !it.isVideo })
                             },
                             onLongPress = { startSelect(e.path) },
                         )
@@ -2167,19 +2208,109 @@ private fun AnimatedGif(path: String, modifier: Modifier) {
     )
 }
 
+/**
+ * Full-screen photo viewer that pages through the photos of a chat or library view.
+ *
+ * Swiping left/right moves to the next/previous photo, wrapping not included: a swipe
+ * past the last photo simply stops (the pager's own behaviour). Zoom and pan stay on the
+ * photo; while a photo is zoomed the pager stops taking horizontal drags, so panning a
+ * zoomed picture never flips the page under the finger.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ImageOverlay(path: String, onClose: () -> Unit, onViewInChat: (() -> Unit)? = null) {
-    val image by produceState<ImageBitmap?>(initialValue = null, path) {
-        value = withContext(Dispatchers.IO) {
-            runCatching { decodeScaled(path, 2048) }.getOrNull()
-        }
-    }
+private fun ImageOverlay(
+    pager: PhotoPager,
+    onClose: () -> Unit,
+    /** Jump to a message, remembering the photo that was on screen. */
+    onViewInChat: (Int, String) -> Unit,
+) {
+    if (pager.items.isEmpty()) return
     var shown by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { shown = true }
     val animations = LocalAnimations.current
     val fade by animateFloatAsState(if (shown) 1f else 0f, tween(if (animations) 160 else 0), label = "imageOverlay")
 
-    // Pinch-to-zoom / pan, with double-tap to toggle zoom. Reset whenever the image changes.
+    val pagerState = rememberPagerState(
+        initialPage = pager.index.coerceIn(0, pager.items.lastIndex),
+    ) { pager.items.size }
+
+    // The page whose photo is zoomed, or -1. A zoomed photo owns horizontal drags.
+    var zoomedPage by remember { mutableIntStateOf(-1) }
+    // Every page starts unzoomed, so landing on a new one always restores paging.
+    LaunchedEffect(pagerState.currentPage) { zoomedPage = -1 }
+    val current = pager.items.getOrNull(pagerState.currentPage)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .alpha(fade)
+            .background(Color.Black.copy(alpha = 0.96f))
+            // Tapping the letterbox closes; taps on the photo are handled below.
+            .clickable(onClick = onClose),
+        contentAlignment = Alignment.Center,
+    ) {
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize(),
+            // Only the visible page is decoded, so paging cannot hold several
+            // 2048px bitmaps in memory at once.
+            beyondViewportPageCount = 0,
+            userScrollEnabled = zoomedPage != pagerState.currentPage,
+            key = { i -> pager.items.getOrNull(i)?.path ?: i },
+        ) { page ->
+            ZoomablePhoto(
+                path = pager.items[page].path,
+                onTap = onClose,
+                onZoomedChange = { zoomed ->
+                    if (zoomed) zoomedPage = page
+                    else if (zoomedPage == page) zoomedPage = -1
+                },
+            )
+        }
+
+        if (pager.items.size > 1) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 24.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .padding(horizontal = 12.dp, vertical = 5.dp),
+            ) {
+                Text(
+                    text = "${pagerState.currentPage + 1} / ${pager.items.size}",
+                    color = Color.White,
+                    fontSize = 13.sp,
+                )
+            }
+        }
+
+        current?.let { page ->
+            page.msgIndex?.let { idx ->
+                ViewInChatButton(
+                    onClick = { onViewInChat(idx, page.path) },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 28.dp),
+                )
+            }
+        }
+    }
+}
+
+/** One page of the photo viewer: the photo, pinch zoom, pan, tap to close. */
+@Composable
+private fun ZoomablePhoto(
+    path: String,
+    onTap: () -> Unit,
+    /** Called when this photo starts or stops being zoomed. */
+    onZoomedChange: (Boolean) -> Unit,
+) {
+    val image by produceState<ImageBitmap?>(initialValue = null, path) {
+        value = withContext(Dispatchers.IO) {
+            runCatching { decodeScaled(path, 2048) }.getOrNull()
+        }
+    }
     var scale by remember(path) { mutableFloatStateOf(1f) }
     var offset by remember(path) { mutableStateOf(Offset.Zero) }
     var boxSize by remember(path) { mutableStateOf(IntSize.Zero) }
@@ -2189,21 +2320,10 @@ private fun ImageOverlay(path: String, onClose: () -> Unit, onViewInChat: (() ->
         val maxY = (s - 1f) * boxSize.height / 2f
         return Offset(o.x.coerceIn(-maxX, maxX), o.y.coerceIn(-maxY, maxY))
     }
-    val transformState = rememberTransformableState { zoomChange, panChange, _ ->
-        scale = (scale * zoomChange).coerceIn(1f, 5f)
-        offset = clamp(offset + panChange, scale)
-    }
-    fun resetZoom() {
-        scale = 1f
-        offset = Offset.Zero
-    }
+    LaunchedEffect(scale) { onZoomedChange(scale > 1f) }
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .alpha(fade)
-            .background(Color.Black.copy(alpha = 0.96f))
-            .clickable(onClick = onClose),
+        modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center,
     ) {
         val img = image
@@ -2224,22 +2344,58 @@ private fun ImageOverlay(path: String, onClose: () -> Unit, onViewInChat: (() ->
                     }
                     .pointerInput(path) {
                         detectTapGestures(
-                            onTap = { onClose() },
-                            onDoubleTap = { if (scale > 1f) resetZoom() else scale = 2.5f },
+                            onTap = { onTap() },
+                            onDoubleTap = {
+                                if (scale > 1f) {
+                                    scale = 1f
+                                    offset = Offset.Zero
+                                } else {
+                                    scale = 2.5f
+                                    offset = clamp(offset, scale)
+                                }
+                            },
                         )
                     }
-                    .transformable(transformState),
+                    // Zoom/pan live here rather than in Modifier.transformable because
+                    // transformable consumes single-finger drags too, which would make the
+                    // pager unscrollable. At scale 1 a one-finger drag is deliberately left
+                    // unconsumed so the pager receives it and flips the page.
+                    .pointerInput(path) {
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false)
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val pressed = event.changes.count { it.pressed }
+                                if (pressed == 0) break
+                                if (pressed >= 2) {
+                                    // Claim the pager as soon as a second finger lands, even
+                                    // before the pinch produces a zoom change, so a two-finger
+                                    // gesture never scrolls the page.
+                                    onZoomedChange(true)
+                                    val zoom = event.calculateZoom()
+                                    val pan = event.calculatePan()
+                                    if (zoom != 1f || pan != Offset.Zero) {
+                                        scale = (scale * zoom).coerceIn(1f, 5f)
+                                        offset = clamp(offset + pan, scale)
+                                        event.changes.forEach { it.consume() }
+                                    }
+                                } else if (scale > 1f) {
+                                    val change = event.changes.firstOrNull { it.pressed }
+                                    if (change != null) {
+                                        val delta = change.positionChange()
+                                        if (delta != Offset.Zero) {
+                                            offset = clamp(offset + delta, scale)
+                                            change.consume()
+                                        }
+                                    }
+                                }
+                            }
+                            onZoomedChange(scale > 1f)
+                        }
+                    },
             )
         } else {
             Text(text = "Loading…", color = Tokens.Text)
-        }
-        if (onViewInChat != null) {
-            ViewInChatButton(
-                onClick = onViewInChat,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 28.dp),
-            )
         }
     }
 }
