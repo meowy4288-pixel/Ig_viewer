@@ -20,7 +20,7 @@ import {
   resolveTheme,
   type Prefs,
 } from "./logic";
-import { avatarChip, closeLightbox, el, renderMonth, renderSearchHit } from "./ui";
+import { avatarChip, closeLightbox, el, initLightbox, renderMonth, renderSearchHit } from "./ui";
 
 interface ArchiveState {
   id: string;
@@ -644,11 +644,7 @@ function wire(): void {
     const box = $<HTMLElement>("#msgs");
     box.scrollTo({ top: box.scrollHeight, behavior: "smooth" });
   });
-  $("#lightbox-close").addEventListener("click", () => closeLightbox());
-  $<HTMLDialogElement>("#lightbox").addEventListener("click", (e) => {
-    // A click on the backdrop (outside the panel) closes.
-    if (e.target === $("#lightbox")) closeLightbox();
-  });
+  initLightbox();
   $("#settings-btn").addEventListener("click", (e) => {
     e.stopPropagation();
     openSettings($("#settings").hidden);

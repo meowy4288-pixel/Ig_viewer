@@ -693,30 +693,81 @@ dialog {
   max-width: 90vw;
   max-height: 90vh;
   margin: auto;
+  /* Anchors the close button and the prev/next arrows. */
+  position: relative;
 }
 dialog::backdrop {
   background: #000c;
 }
+.lbstage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .lbimg {
   width: min(80vw, 900px);
-  max-height: 84vh;
+  max-height: 78vh;
   display: grid;
   place-items: center;
   color: var(--ash);
   background: var(--crypt);
   border-radius: 8px;
   overflow: hidden;
+  /* Horizontal drags reach the swipe handler instead of being eaten by scrolling. */
+  touch-action: pan-y;
 }
 .lbimg img {
   max-width: 100%;
-  max-height: 84vh;
+  max-height: 78vh;
   display: block;
   object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
 }
-#lbx {
+#lightbox-close {
   position: absolute;
   top: 8px;
   right: 8px;
+  z-index: 2;
+}
+.lbnav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 24px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  color: var(--bone);
+  background: #0009;
+  border: 1px solid var(--gilt-dim);
+  cursor: pointer;
+}
+.lbnav:hover {
+  background: #000d;
+}
+.lbnav:focus-visible {
+  outline: 2px solid var(--gilt);
+  outline-offset: 2px;
+}
+#lightbox-prev {
+  left: 8px;
+}
+#lightbox-next {
+  right: 8px;
+}
+.lbcount {
+  min-height: 16px;
+  padding-top: 6px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ash);
 }
 
 /* -------------------------------------------------------------- animation */

@@ -217,6 +217,43 @@ export function monthOfIsoDate(iso: string): string | null {
   return m ? `${m[1]}-${m[2]}` : null;
 }
 
+// ----------------------------------------------------------------- lightbox
+// The photo viewer's navigation is arithmetic, so it lives here and is covered by
+// tests instead of being buried in an event handler.
+
+/**
+ * Index of the photo `delta` steps from `index`, wrapping at both ends.
+ *
+ * Wrapping is deliberate: pressing "next" on the last photo returns to the first
+ * rather than dead-ending, and `delta` may be any integer. A nonsensical index or
+ * an empty gallery yields 0 rather than NaN.
+ */
+export function stepIndex(index: number, delta: number, length: number): number {
+  if (!Number.isFinite(length) || length <= 0) return 0;
+  const from = Math.min(Math.max(Math.trunc(index) || 0, 0), length - 1);
+  const step = Number.isFinite(delta) ? Math.trunc(delta) : 0;
+  return (((from + step) % length) + length) % length;
+}
+
+/** Minimum horizontal travel, in CSS pixels, before a drag counts as a swipe. */
+export const SWIPE_MIN_PX = 40;
+
+/**
+ * Which way a pointer gesture went: -1 back, +1 forward, 0 neither.
+ *
+ * Swipe left goes forward and swipe right goes back, matching every image viewer.
+ * A gesture only navigates when it is mostly horizontal, so a vertical drag -- which
+ * the user may be doing to scroll -- never flips the photo.
+ */
+export function swipeDelta(dx: number, dy: number, minPx: number = SWIPE_MIN_PX): -1 | 0 | 1 {
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return 0;
+  if (Math.abs(dx) < minPx) return 0;
+  // A diagonal or vertical drag is scrolling, not paging, so only a clearly
+  // horizontal gesture counts.
+  if (Math.abs(dx) <= Math.abs(dy)) return 0;
+  return dx < 0 ? 1 : -1;
+}
+
 // -------------------------------------------------------------------- prefs
 // Pure functions so the settings behaviour is testable. They were previously inline
 // in main.ts, where nothing could verify them.

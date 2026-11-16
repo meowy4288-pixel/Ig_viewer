@@ -27,6 +27,9 @@ import {
   dayKey,
   splitLinks,
   splitSnippet,
+  stepIndex,
+  SWIPE_MIN_PX,
+  swipeDelta,
   tsForIsoDate,
   withDayBreaks,
 } from "../dist-test/logic.js";
@@ -248,4 +251,43 @@ test("dayKey: is zero-padded so it sorts lexicographically", () => {
   const feb = dayKey(Date.UTC(2024, 1, 1), "UTC");
   assert.equal(jan, "2024-01-09");
   assert.ok(jan < feb);
+});
+
+// ------------------------------------------------------------- photo viewer
+
+test("stepIndex walks a gallery and wraps at both ends", () => {
+  assert.equal(stepIndex(0, 1, 12), 1);
+  assert.equal(stepIndex(11, 1, 12), 0);
+  assert.equal(stepIndex(0, -1, 12), 11);
+  assert.equal(stepIndex(5, -2, 12), 3);
+  // Any number of steps lands in range.
+  assert.equal(stepIndex(3, 25, 12), 4);
+  assert.equal(stepIndex(3, -25, 12), 2);
+});
+
+test("stepIndex is safe with a single photo and with none", () => {
+  assert.equal(stepIndex(0, 1, 1), 0);
+  assert.equal(stepIndex(0, -1, 1), 0);
+  assert.equal(stepIndex(0, 1, 0), 0);
+  assert.equal(stepIndex(-4, 1, 3), 1);
+  assert.equal(stepIndex(99, 1, 3), 0);
+  assert.equal(stepIndex(NaN, 1, 3), 1);
+  assert.equal(stepIndex(1, NaN, 3), 1);
+});
+
+test("swipeDelta: left is forward, right is back", () => {
+  assert.equal(swipeDelta(-120, 4), 1);
+  assert.equal(swipeDelta(120, -4), -1);
+  assert.equal(swipeDelta(-120, 4, 40), 1);
+});
+
+test("swipeDelta ignores short or mostly vertical gestures", () => {
+  assert.equal(swipeDelta(0, 0), 0);
+  assert.equal(swipeDelta(SWIPE_MIN_PX - 1, 0), 0);
+  assert.equal(swipeDelta(-30, 0), 0);
+  // A vertical drag is scrolling, not a swipe, even when it drifts sideways.
+  assert.equal(swipeDelta(-50, 90), 0);
+  // A perfect diagonal is ambiguous, so it stays put rather than paging.
+  assert.equal(swipeDelta(-50, 50), 0);
+  assert.equal(swipeDelta(Number.NaN, 0), 0);
 });

@@ -18,6 +18,8 @@ import {
   isVideoKind,
   splitLinks,
   splitSnippet,
+  stepIndex,
+  swipeDelta,
   withDayBreaks,
 } from "./logic";
 
@@ -123,23 +125,152 @@ export function renderMedia(m: UiMedia): HTMLElement | null {
   return el("div", "dim", `(${m.kind} cannot be previewed)`);
 }
 
-/** Show a photo full-screen in the <dialog> overlay. */
+// --------------------------------------------------------------- lightbox
+//
+// The open thread is a photo gallery: clicking any photo opens it full-screen and
+// the viewer can move back and forward with the arrow keys, the on-screen arrows,
+// or a horizontal swipe. The gallery is the set of photos currently rendered in
+// the thread pane, in display order, so navigation follows what is on screen
+// rather than guessing at message order.
+
+/** Photos in the open thread pane, in document (display) order. */
+let gallery: HTMLImageElement[] = [];
+let galleryIndex = 0;
+
+function galleryPhotos(): HTMLImageElement[] {
+  // `.photo` is only ever set on a photo whose src passed isSafeMediaUrl in
+  // renderMedia, so every element here already carries a trusted igmedia: URL.
+  return Array.from(document.querySelectorAll<HTMLImageElement>("#msgs img.photo"));
+}
+
+/** Draw the current gallery entry into the dialog and refresh the counter. */
+function paintLightbox(): void {
+  const target = document.getElementById("lightbox-img");
+  if (!target) return;
+  const photo = gallery[galleryIndex];
+  if (!photo) {
+    target.replaceChildren();
+    return;
+  }
+  const full = document.createElement("img");
+  full.src = photo.src;
+  full.alt = photo.alt;
+  // A drag must reach the swipe handler, not start a native image drag.
+  full.draggable = false;
+  target.replaceChildren(full);
+
+  const multi = gallery.length > 1;
+  const counter = document.getElementById("lightbox-count");
+  if (counter) counter.textContent = multi ? `${galleryIndex + 1} / ${gallery.length}` : "";
+  for (const id of ["lightbox-prev", "lightbox-next"]) {
+    const btn = document.getElementById(id);
+    if (btn) (btn as HTMLElement).hidden = !multi;
+  }
+}
+
+/** Move `delta` photos through the open gallery, wrapping at both ends. */
+export function stepLightbox(delta: number): void {
+  const box = document.getElementById("lightbox") as HTMLDialogElement | null;
+  if (!box || !box.open || gallery.length === 0) return;
+  galleryIndex = stepIndex(galleryIndex, delta, gallery.length);
+  paintLightbox();
+}
+
+/** Show a photo full-screen; the gallery is whatever else is on screen. */
 export function openLightbox(img: HTMLImageElement): void {
   const box = document.getElementById("lightbox") as HTMLDialogElement | null;
-  const target = document.getElementById("lightbox-img");
-  if (!box || !target) return;
-  target.replaceChildren();
-  const full = document.createElement("img");
-  full.src = img.src;
-  full.alt = img.alt;
-  target.append(full);
-  box.showModal();
+  if (!box || !document.getElementById("lightbox-img")) return;
+  const photos = galleryPhotos();
+  const at = photos.indexOf(img);
+  // Never show a different photo than the one clicked: if `img` is somehow not in
+  // the pane's photo list, it becomes a one-photo gallery instead of falling back
+  // to whatever happens to be first.
+  if (at >= 0) {
+    gallery = photos;
+    galleryIndex = at;
+  } else {
+    gallery = [img];
+    galleryIndex = 0;
+  }
+  paintLightbox();
+  if (!box.open) box.showModal();
 }
 
 /** Hide the lightbox. */
 export function closeLightbox(): void {
   const box = document.getElementById("lightbox") as HTMLDialogElement | null;
   if (box && box.open) box.close();
+  gallery = [];
+  galleryIndex = 0;
+}
+
+/** Wire the photo viewer's controls. Called once from main.ts. */
+export function initLightbox(): void {
+  const box = document.getElementById("lightbox") as HTMLDialogElement | null;
+  if (!box) return;
+
+  document.getElementById("lightbox-close")?.addEventListener("click", () => closeLightbox());
+  document.getElementById("lightbox-prev")?.addEventListener("click", () => stepLightbox(-1));
+  document.getElementById("lightbox-next")?.addEventListener("click", () => stepLightbox(1));
+
+  // Arrow keys work whenever the viewer is open, regardless of which control has
+  // focus. Escape is left to <dialog> itself and to main.ts.
+  document.addEventListener("keydown", (e) => {
+    if (!box.open) return;
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      stepLightbox(-1);
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      stepLightbox(1);
+    }
+  });
+
+  // Pointer events cover touch, pen and mouse drag with one code path. `moved`
+  // keeps a drag from also being read as a backdrop click (which would close the
+  // viewer the moment a swipe ends outside the panel).
+  let startX = 0;
+  let startY = 0;
+  let tracking = false;
+  let moved = 0;
+
+  box.addEventListener("pointerdown", (e) => {
+    // Presses on a control are clicks, not swipes.
+    if (!(e.target instanceof Element) || e.target.closest("button")) return;
+    tracking = true;
+    moved = 0;
+    startX = e.clientX;
+    startY = e.clientY;
+  });
+
+  box.addEventListener("pointerup", (e) => {
+    if (!tracking) return;
+    tracking = false;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    moved = Math.abs(dx) + Math.abs(dy);
+    const dir = swipeDelta(dx, dy);
+    if (dir !== 0) stepLightbox(dir);
+  });
+
+  box.addEventListener("pointercancel", () => {
+    tracking = false;
+  });
+
+  box.addEventListener("click", (e) => {
+    if (e.target !== box) return;
+    if (moved > 8) {
+      moved = 0;
+      return;
+    }
+    closeLightbox();
+  });
+
+  // Escape closes natively; make sure the gallery state does not linger.
+  box.addEventListener("close", () => {
+    gallery = [];
+    galleryIndex = 0;
+  });
 }
 
 /** Arch-shaped avatar used in the sidebar and chat header. */
